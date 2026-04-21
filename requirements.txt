@@ -1,0 +1,3 @@
+flask
+flask-sock
+google-genai>=1.10.0

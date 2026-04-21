@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Assignment 5 Dashboard</title>
+    <style>
+        :root {
+            --bg: #f3efe5;
+            --panel: #fffdf8;
+            --ink: #1b1b18;
+            --accent: #ba4a00;
+            --muted: #6d665c;
+            --line: #ddd2c2;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Georgia, "Times New Roman", serif;
+            background: linear-gradient(180deg, #efe5d3 0%, var(--bg) 100%);
+            color: var(--ink);
+        }
+
+        main {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 48px 20px 64px;
+        }
+
+        h1 {
+            margin: 0 0 8px;
+            font-size: 2.8rem;
+        }
+
+        p {
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 16px;
+            margin-top: 28px;
+        }
+
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            padding: 20px;
+            box-shadow: 0 12px 30px rgba(53, 40, 24, 0.08);
+        }
+
+        .eyebrow {
+            color: var(--accent);
+            font-size: 0.82rem;
+            font-weight: bold;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        ul {
+            margin: 12px 0 0;
+            padding-left: 18px;
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <div class="eyebrow">Step 1 Scaffold</div>
+        <h1>Smart Voice Assistant Dashboard</h1>
+        <p>
+            This placeholder dashboard establishes the Assignment 5 app shape.
+            The next steps will connect SQLite storage, real dashboard data, and
+            the M5Stick workflow.
+        </p>
+
+        <section class="grid">
+            <article class="card">
+                <div class="eyebrow">Planned Device Modes</div>
+                <ul>
+                    <li>Todo list display</li>
+                    <li>On-demand voice note capture</li>
+                </ul>
+            </article>
+            <article class="card">
+                <div class="eyebrow">Planned Data</div>
+                <ul>
+                    <li>Todos</li>
+                    <li>Notes and transcripts</li>
+                    <li>Interaction history</li>
+                </ul>
+            </article>
+            <article class="card">
+                <div class="eyebrow">Planned Interfaces</div>
+                <ul>
+                    <li>Flask routes for dashboard and API</li>
+                    <li>WebSocket assistant endpoint</li>
+                    <li>Device state endpoint for compact sync</li>
+                </ul>
+            </article>
+        </section>
+    </main>
+</body>
+</html>

@@ -1,0 +1,39 @@
+# ELEE 2045 Assignment 5
+
+This repository contains the Assignment 5 implementation for the smart voice assistant and cloud web dashboard project.
+
+## Step-by-step build plan
+
+1. Scaffold the Assignment 5 project structure and backend route layout.
+2. Add the SQLite schema and persistence layer for notes, todos, and interaction history.
+3. Implement the Flask API routes and WebSocket assistant workflow against the database.
+4. Build the dashboard UI for notes, todos, and device state.
+5. Connect the M5Stick firmware to the finalized backend workflow.
+6. Add authentication for the dashboard and device API access.
+7. Implement the creative extension.
+8. Finalize deployment and submission materials.
+
+## Planned backend surface
+
+- `GET /` dashboard
+- `GET /healthz` health check
+- `GET /api/todos` fetch todo list
+- `POST /api/todos` create todo
+- `POST /api/todos/<id>/complete` mark todo complete
+- `GET /api/notes` fetch saved notes
+- `GET /api/device/state` fetch compact device-friendly state
+- `WS /ws/assistant` stream audio, transcription, and assistant responses
+
+## Local development
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Run the Flask app:
+
+```bash
+python app.py
+```
