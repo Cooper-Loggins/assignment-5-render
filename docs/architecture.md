@@ -42,3 +42,30 @@ The project will be built from the voice-assistant prototype direction rather th
 3. Wire routes to persistence
 4. Replace placeholder dashboard with functional UI
 5. Integrate firmware with final routes and auth
+
+## Current database schema
+
+### `todos`
+
+- `id`
+- `title`
+- `is_complete`
+- `created_at`
+- `completed_at`
+
+### `notes`
+
+- `id`
+- `transcript`
+- `summary`
+- `audio_path`
+- `source`
+- `created_at`
+
+### `interactions`
+
+- `id`
+- `transcript`
+- `assistant_response`
+- `status`
+- `created_at`

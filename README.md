@@ -21,6 +21,8 @@ This repository contains the Assignment 5 implementation for the smart voice ass
 - `POST /api/todos` create todo
 - `POST /api/todos/<id>/complete` mark todo complete
 - `GET /api/notes` fetch saved notes
+- `POST /api/notes` create note
+- `GET /api/interactions` fetch interaction history
 - `GET /api/device/state` fetch compact device-friendly state
 - `WS /ws/assistant` stream audio, transcription, and assistant responses
 
@@ -37,3 +39,5 @@ Run the Flask app:
 ```bash
 python app.py
 ```
+
+The SQLite database is created automatically on startup at `DATABASE_PATH`.
