@@ -25,6 +25,7 @@
 #define SERVER_PORT 443
 #define WS_PATH "/ws/assistant"
 #define DEVICE_STATE_URL "https://your-public-hostname.example.com/api/device/state"
+#define DEVICE_API_KEY "replace_me"
 
 #define SAMPLE_RATE 16000
 #define MIC_BUF_LEN 256
@@ -33,6 +34,7 @@
 
 WebSocketsClient ws;
 Preferences prefs;
+String wsExtraHeaders;
 
 enum AssistantState { DISCONNECTED, READY, RECORDING, PROCESSING };
 AssistantState assistantState = DISCONNECTED;
@@ -254,6 +256,7 @@ void fetchDeviceState() {
     return;
   }
 
+  http.addHeader("X-Device-API-Key", DEVICE_API_KEY);
   int code = http.GET();
   if (code <= 0) {
     http.end();
@@ -346,6 +349,8 @@ void setup() {
   M5.Mic.begin();
 
   ws.beginSSL(SERVER_HOST, SERVER_PORT, WS_PATH);
+  wsExtraHeaders = "X-Device-API-Key: " + String(DEVICE_API_KEY) + "\r\n";
+  ws.setExtraHeaders(wsExtraHeaders.c_str());
   ws.onEvent(onWebSocket);
   ws.setReconnectInterval(3000);
 

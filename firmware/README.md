@@ -10,6 +10,7 @@ Current behavior:
 - poll `/api/device/state` over HTTPS
 - show a to-do preview mode
 - show a live assistant response mode
+- send `X-Device-API-Key` for both HTTPS and WSS requests
 
 Current controls:
 
@@ -20,4 +21,5 @@ Before flashing:
 
 - update `SERVER_HOST`
 - update `DEVICE_STATE_URL`
+- update `DEVICE_API_KEY` to match the server `.env`
 - make sure your public deployment is running over HTTPS / WSS

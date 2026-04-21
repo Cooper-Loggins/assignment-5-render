@@ -1,8 +1,10 @@
 import json
 import os
 import urllib.request
+from functools import wraps
+from hmac import compare_digest
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request
 from flask_sock import Sock
 from google import genai
 
@@ -114,6 +116,47 @@ def generate_assistant_response(transcript, created_todo):
     return text or build_fallback_response(transcript, created_todo)
 
 
+def dashboard_unauthorized():
+    return Response(
+        "Dashboard authentication required.",
+        401,
+        {"WWW-Authenticate": 'Basic realm="Assignment 5 Dashboard"'},
+    )
+
+
+def dashboard_auth_is_valid():
+    auth = request.authorization
+    expected_user = os.environ.get("DASHBOARD_USERNAME", "admin")
+    expected_password = os.environ.get("DASHBOARD_PASSWORD", "replace_me")
+
+    if auth is None or auth.username is None or auth.password is None:
+        return False
+
+    return compare_digest(auth.username, expected_user) and compare_digest(
+        auth.password, expected_password
+    )
+
+
+def require_dashboard_auth(view_func):
+    @wraps(view_func)
+    def wrapped(*args, **kwargs):
+        if not dashboard_auth_is_valid():
+            return dashboard_unauthorized()
+        return view_func(*args, **kwargs)
+
+    return wrapped
+
+
+def device_api_key_is_valid():
+    expected_key = os.environ.get("DEVICE_API_KEY", "replace_me")
+    provided_key = request.headers.get("X-Device-API-Key", "")
+    return compare_digest(provided_key, expected_key)
+
+
+def device_unauthorized():
+    return jsonify({"status": "error", "message": "invalid device api key"}), 401
+
+
 def create_app():
     app = Flask(__name__)
     app.config["SECRET_KEY"] = os.environ.get("APP_SECRET_KEY", "dev-secret")
@@ -127,10 +170,12 @@ def create_app():
         return jsonify({"status": "ok", "database_path": app.config["DATABASE_PATH"]})
 
     @app.get("/")
+    @require_dashboard_auth
     def dashboard():
         return render_template("dashboard.html")
 
     @app.get("/api/todos")
+    @require_dashboard_auth
     def list_todos():
         return jsonify(
             {
@@ -140,6 +185,7 @@ def create_app():
         )
 
     @app.post("/api/todos")
+    @require_dashboard_auth
     def create_todo():
         payload = request.get_json(silent=True) or {}
         title = (payload.get("title") or "").strip()
@@ -150,6 +196,7 @@ def create_app():
         return jsonify({"status": "created", "item": item}), 201
 
     @app.post("/api/todos/<int:todo_id>/complete")
+    @require_dashboard_auth
     def complete_todo(todo_id):
         item = db.mark_todo_complete(todo_id)
         if item is None:
@@ -157,6 +204,7 @@ def create_app():
         return jsonify({"status": "ok", "item": item})
 
     @app.get("/api/notes")
+    @require_dashboard_auth
     def list_notes():
         return jsonify(
             {
@@ -166,6 +214,7 @@ def create_app():
         )
 
     @app.post("/api/notes")
+    @require_dashboard_auth
     def create_note():
         payload = request.get_json(silent=True) or {}
         transcript = (payload.get("transcript") or "").strip()
@@ -181,11 +230,15 @@ def create_app():
         return jsonify({"status": "created", "item": item}), 201
 
     @app.get("/api/interactions")
+    @require_dashboard_auth
     def list_interactions():
         return jsonify({"items": db.fetch_interactions(), "status": "ok"})
 
     @app.get("/api/device/state")
     def device_state():
+        if not device_api_key_is_valid():
+            return device_unauthorized()
+
         todos = db.fetch_todos(limit=5, include_completed=False)
         notes = db.fetch_notes(limit=1)
         return jsonify(
@@ -199,6 +252,11 @@ def create_app():
 
     @sock.route("/ws/assistant")
     def assistant_socket(ws):
+        if not device_api_key_is_valid():
+            ws.send("R:Unauthorized device.")
+            ws.send("D")
+            return
+
         interaction = db.insert_interaction(status="connected")
         audio_buffer = bytearray()
         recording = False

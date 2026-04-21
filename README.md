@@ -48,7 +48,13 @@ This repository contains the Assignment 5 implementation for the smart voice ass
 - Streams audio to `WS /ws/assistant`
 - Polls `GET /api/device/state` for the compact to-do preview
 - Shows a to-do screen and an assistant-response screen on the M5Stick
-- Uses the current backend contract, but does not send device auth yet
+- Sends `X-Device-API-Key` to the device-facing backend endpoints
+
+## Current auth behavior
+
+- Dashboard routes and dashboard JSON APIs require HTTP Basic Auth
+- Device endpoints require an `X-Device-API-Key` header
+- Health check remains open for simple deployment verification
 
 ## Local development
 
