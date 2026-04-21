@@ -26,6 +26,15 @@ This repository contains the Assignment 5 implementation for the smart voice ass
 - `GET /api/device/state` fetch compact device-friendly state
 - `WS /ws/assistant` stream audio, transcription, and assistant responses
 
+## Current assistant behavior
+
+- Accepts the M5Stick-compatible WebSocket control flow with `start`, audio bytes, and `stop`
+- Buffers streamed PCM audio on the server
+- Transcribes with Wit.ai when `WIT_TOKEN` is configured
+- Stores transcripts as notes in SQLite
+- Creates todos from simple voice prefixes such as `todo:` or `remember to`
+- Saves interaction history and returns a short assistant response
+
 ## Local development
 
 Install dependencies:

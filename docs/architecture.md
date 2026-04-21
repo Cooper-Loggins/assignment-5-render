@@ -69,3 +69,13 @@ The project will be built from the voice-assistant prototype direction rather th
 - `assistant_response`
 - `status`
 - `created_at`
+
+## Current WebSocket flow
+
+1. Device sends `start`
+2. Server buffers incoming binary audio chunks
+3. Device sends `stop`
+4. Server transcribes the audio
+5. Server stores a note and interaction row
+6. Server optionally creates a todo from simple command prefixes
+7. Server sends transcript and assistant response back to the device

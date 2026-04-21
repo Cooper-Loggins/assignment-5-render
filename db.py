@@ -194,3 +194,44 @@ def insert_interaction(transcript=None, assistant_response=None, status="receive
         (cursor.lastrowid,),
     ).fetchone()
     return dict(row)
+
+
+def update_interaction(interaction_id, transcript=None, assistant_response=None, status=None):
+    db = get_db()
+    current = db.execute(
+        """
+        SELECT id, transcript, assistant_response, status, created_at
+        FROM interactions
+        WHERE id = ?
+        """,
+        (interaction_id,),
+    ).fetchone()
+
+    if current is None:
+        return None
+
+    transcript = current["transcript"] if transcript is None else transcript
+    assistant_response = (
+        current["assistant_response"] if assistant_response is None else assistant_response
+    )
+    status = current["status"] if status is None else status
+
+    db.execute(
+        """
+        UPDATE interactions
+        SET transcript = ?, assistant_response = ?, status = ?
+        WHERE id = ?
+        """,
+        (transcript, assistant_response, status, interaction_id),
+    )
+    db.commit()
+
+    row = db.execute(
+        """
+        SELECT id, transcript, assistant_response, status, created_at
+        FROM interactions
+        WHERE id = ?
+        """,
+        (interaction_id,),
+    ).fetchone()
+    return dict(row)
