@@ -35,6 +35,14 @@ This repository contains the Assignment 5 implementation for the smart voice ass
 - Creates todos from simple voice prefixes such as `todo:` or `remember to`
 - Saves interaction history and returns a short assistant response
 
+## Current dashboard behavior
+
+- Loads health, todos, notes, interactions, and device state from the live API
+- Allows manual todo creation
+- Allows marking todos complete
+- Allows manual note creation
+- Shows recent assistant sessions and the compact device snapshot
+
 ## Local development
 
 Install dependencies:

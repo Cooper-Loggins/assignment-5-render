@@ -3,15 +3,21 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Assignment 5 Dashboard</title>
+    <title>Smart Voice Assistant Dashboard</title>
     <style>
         :root {
-            --bg: #f3efe5;
-            --panel: #fffdf8;
-            --ink: #1b1b18;
-            --accent: #ba4a00;
-            --muted: #6d665c;
-            --line: #ddd2c2;
+            --bg: #f6f1e8;
+            --bg-2: #eadfcd;
+            --panel: rgba(255, 251, 245, 0.9);
+            --ink: #1f1a14;
+            --muted: #6f6558;
+            --accent: #b65422;
+            --accent-dark: #8f3f16;
+            --line: rgba(98, 80, 61, 0.18);
+            --ok: #2f7d4c;
+            --done: #8a8a8a;
+            --shadow: 0 20px 40px rgba(85, 60, 28, 0.12);
+            --radius: 22px;
         }
 
         * {
@@ -20,91 +26,688 @@
 
         body {
             margin: 0;
-            font-family: Georgia, "Times New Roman", serif;
-            background: linear-gradient(180deg, #efe5d3 0%, var(--bg) 100%);
             color: var(--ink);
+            font-family: Georgia, "Times New Roman", serif;
+            background:
+                radial-gradient(circle at top left, rgba(182, 84, 34, 0.12), transparent 26%),
+                radial-gradient(circle at top right, rgba(47, 125, 76, 0.12), transparent 24%),
+                linear-gradient(180deg, var(--bg-2) 0%, var(--bg) 100%);
+            min-height: 100vh;
         }
 
         main {
-            max-width: 960px;
+            max-width: 1240px;
             margin: 0 auto;
-            padding: 48px 20px 64px;
+            padding: 32px 18px 48px;
+        }
+
+        .hero {
+            display: grid;
+            grid-template-columns: 1.25fr 0.75fr;
+            gap: 18px;
+            margin-bottom: 18px;
+        }
+
+        .panel {
+            background: var(--panel);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        .hero-copy {
+            padding: 30px;
+        }
+
+        .eyebrow {
+            margin-bottom: 10px;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-size: 0.82rem;
+            font-weight: 700;
+        }
+
+        h1, h2, h3, p {
+            margin: 0;
         }
 
         h1 {
-            margin: 0 0 8px;
-            font-size: 2.8rem;
+            font-size: clamp(2.5rem, 5vw, 4.5rem);
+            line-height: 0.95;
+            max-width: 9ch;
         }
 
-        p {
+        .hero-copy p {
+            margin-top: 16px;
+            max-width: 56ch;
             color: var(--muted);
-            line-height: 1.5;
+            line-height: 1.6;
+        }
+
+        .hero-status {
+            padding: 24px;
+            display: grid;
+            gap: 14px;
+            align-content: start;
+        }
+
+        .status-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            width: fit-content;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(47, 125, 76, 0.12);
+            color: var(--ok);
+            font-weight: 700;
+            font-size: 0.92rem;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .stat {
+            padding: 16px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.64);
+            border: 1px solid var(--line);
+        }
+
+        .stat-label {
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+
+        .stat-value {
+            margin-top: 6px;
+            font-size: 2rem;
+            font-weight: 700;
         }
 
         .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-            gap: 16px;
-            margin-top: 28px;
+            grid-template-columns: 1.05fr 1.15fr 0.8fr;
+            gap: 18px;
+            align-items: start;
+        }
+
+        .stack {
+            display: grid;
+            gap: 18px;
         }
 
         .card {
-            background: var(--panel);
+            padding: 22px;
+        }
+
+        .section-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .section-head h2 {
+            font-size: 1.35rem;
+        }
+
+        .mini {
+            color: var(--muted);
+            font-size: 0.92rem;
+        }
+
+        form {
+            display: grid;
+            gap: 10px;
+        }
+
+        label {
+            font-size: 0.92rem;
+            color: var(--muted);
+        }
+
+        input,
+        textarea,
+        button {
+            font: inherit;
+        }
+
+        input,
+        textarea {
+            width: 100%;
             border: 1px solid var(--line);
-            border-radius: 18px;
-            padding: 20px;
-            box-shadow: 0 12px 30px rgba(53, 40, 24, 0.08);
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.85);
+            padding: 12px 14px;
+            color: var(--ink);
         }
 
-        .eyebrow {
-            color: var(--accent);
-            font-size: 0.82rem;
-            font-weight: bold;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
+        textarea {
+            min-height: 116px;
+            resize: vertical;
         }
 
-        ul {
-            margin: 12px 0 0;
-            padding-left: 18px;
+        button {
+            border: 0;
+            border-radius: 14px;
+            padding: 12px 16px;
+            cursor: pointer;
+            transition: transform 120ms ease, background 120ms ease;
+        }
+
+        button:hover {
+            transform: translateY(-1px);
+        }
+
+        .primary {
+            background: var(--accent);
+            color: #fffaf4;
+            font-weight: 700;
+        }
+
+        .primary:hover {
+            background: var(--accent-dark);
+        }
+
+        .ghost {
+            background: rgba(182, 84, 34, 0.09);
+            color: var(--accent-dark);
+            font-weight: 700;
+        }
+
+        .list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .item {
+            padding: 14px;
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.72);
+        }
+
+        .item-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            gap: 12px;
+        }
+
+        .item-title {
+            font-size: 1.02rem;
+            line-height: 1.35;
+        }
+
+        .item-title.done {
+            color: var(--done);
+            text-decoration: line-through;
+        }
+
+        .item-meta {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 0.88rem;
+        }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(182, 84, 34, 0.1);
+            color: var(--accent-dark);
+            font-size: 0.8rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .pill.ok {
+            background: rgba(47, 125, 76, 0.12);
+            color: var(--ok);
+        }
+
+        .pill.done {
+            background: rgba(111, 101, 88, 0.12);
+            color: var(--done);
+        }
+
+        .empty {
+            padding: 18px;
+            border: 1px dashed var(--line);
+            border-radius: 16px;
+            color: var(--muted);
+            text-align: center;
+            background: rgba(255, 255, 255, 0.5);
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .toolbar-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .flash {
+            min-height: 1.3rem;
+            font-size: 0.92rem;
+            color: var(--muted);
+        }
+
+        .flash.error {
+            color: #a52828;
+        }
+
+        .flash.success {
+            color: var(--ok);
+        }
+
+        .mono {
+            font-family: "SFMono-Regular", Consolas, monospace;
+            font-size: 0.84rem;
+        }
+
+        @media (max-width: 1024px) {
+            .hero,
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 640px) {
+            main {
+                padding: 18px 12px 32px;
+            }
+
+            .hero-copy,
+            .hero-status,
+            .card {
+                padding: 18px;
+            }
+
+            h1 {
+                max-width: none;
+            }
+
+            .stat-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
     <main>
-        <div class="eyebrow">Step 1 Scaffold</div>
-        <h1>Smart Voice Assistant Dashboard</h1>
-        <p>
-            This placeholder dashboard establishes the Assignment 5 app shape.
-            The next steps will connect SQLite storage, real dashboard data, and
-            the M5Stick workflow.
-        </p>
+        <section class="hero">
+            <article class="panel hero-copy">
+                <div class="eyebrow">Assignment 5 Dashboard</div>
+                <h1>Voice Notes, To-Dos, and Device State</h1>
+                <p>
+                    This dashboard is now wired to the live Flask API. You can add notes,
+                    create or complete tasks, and inspect the recent assistant history that
+                    comes from the M5Stick workflow.
+                </p>
+            </article>
+
+            <aside class="panel hero-status">
+                <div class="status-chip">
+                    <span class="status-dot"></span>
+                    <span id="health-status">Loading backend status</span>
+                </div>
+                <div class="stat-grid">
+                    <div class="stat">
+                        <div class="stat-label">Open To-Dos</div>
+                        <div class="stat-value" id="todo-count">0</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Saved Notes</div>
+                        <div class="stat-value" id="note-count">0</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Interactions</div>
+                        <div class="stat-value" id="interaction-count">0</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Device Mode</div>
+                        <div class="stat-value" id="device-mode">-</div>
+                    </div>
+                </div>
+            </aside>
+        </section>
 
         <section class="grid">
-            <article class="card">
-                <div class="eyebrow">Planned Device Modes</div>
-                <ul>
-                    <li>Todo list display</li>
-                    <li>On-demand voice note capture</li>
-                </ul>
+            <div class="stack">
+                <article class="panel card">
+                    <div class="section-head">
+                        <h2>To-Do List</h2>
+                        <span class="mini">Create items here or by voice prefix</span>
+                    </div>
+                    <form id="todo-form">
+                        <label for="todo-title">New task</label>
+                        <input id="todo-title" name="title" maxlength="160" placeholder="Finish the dashboard layout">
+                        <button class="primary" type="submit">Add To-Do</button>
+                    </form>
+                    <div class="flash" id="todo-flash"></div>
+                    <div class="list" id="todo-list"></div>
+                </article>
+
+                <article class="panel card">
+                    <div class="section-head">
+                        <h2>Device Snapshot</h2>
+                        <span class="mini">Compact state returned to the M5Stick</span>
+                    </div>
+                    <div class="list" id="device-state"></div>
+                </article>
+            </div>
+
+            <article class="panel card">
+                <div class="section-head">
+                    <h2>Notes</h2>
+                    <span class="mini">Notes can be created manually or through voice capture</span>
+                </div>
+                <form id="note-form">
+                    <label for="note-transcript">Transcript / note text</label>
+                    <textarea id="note-transcript" name="transcript" placeholder="Remember to bring the demo hardware on Wednesday."></textarea>
+                    <label for="note-summary">Optional summary</label>
+                    <input id="note-summary" name="summary" maxlength="160" placeholder="Hardware reminder">
+                    <button class="primary" type="submit">Save Note</button>
+                </form>
+                <div class="flash" id="note-flash"></div>
+                <div class="toolbar">
+                    <span class="mini">Most recent first</span>
+                    <div class="toolbar-actions">
+                        <button class="ghost" type="button" id="refresh-notes">Refresh Notes</button>
+                    </div>
+                </div>
+                <div class="list" id="note-list"></div>
             </article>
-            <article class="card">
-                <div class="eyebrow">Planned Data</div>
-                <ul>
-                    <li>Todos</li>
-                    <li>Notes and transcripts</li>
-                    <li>Interaction history</li>
-                </ul>
-            </article>
-            <article class="card">
-                <div class="eyebrow">Planned Interfaces</div>
-                <ul>
-                    <li>Flask routes for dashboard and API</li>
-                    <li>WebSocket assistant endpoint</li>
-                    <li>Device state endpoint for compact sync</li>
-                </ul>
+
+            <article class="stack">
+                <div class="panel card">
+                    <div class="section-head">
+                        <h2>Recent Assistant History</h2>
+                        <span class="mini">Stored interaction log</span>
+                    </div>
+                    <div class="toolbar">
+                        <span class="mini">Latest sessions</span>
+                        <div class="toolbar-actions">
+                            <button class="ghost" type="button" id="refresh-all">Refresh All</button>
+                        </div>
+                    </div>
+                    <div class="list" id="interaction-list"></div>
+                </div>
             </article>
         </section>
     </main>
+
+    <script>
+        const state = {
+            todos: [],
+            notes: [],
+            interactions: [],
+            device: null,
+            health: null,
+        };
+
+        function escapeHtml(value) {
+            return String(value ?? "")
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#39;");
+        }
+
+        function formatDate(value) {
+            if (!value) return "Unknown time";
+            const parsed = new Date(value.replace(" ", "T") + "Z");
+            if (Number.isNaN(parsed.getTime())) return value;
+            return parsed.toLocaleString();
+        }
+
+        function setFlash(id, text, kind = "") {
+            const el = document.getElementById(id);
+            el.textContent = text || "";
+            el.className = `flash ${kind}`.trim();
+        }
+
+        async function apiGet(url) {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`GET ${url} failed with ${response.status}`);
+            }
+            return response.json();
+        }
+
+        async function apiPost(url, payload) {
+            const response = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.message || `POST ${url} failed with ${response.status}`);
+            }
+            return data;
+        }
+
+        function renderStats() {
+            const openTodos = state.todos.filter((item) => !item.is_complete).length;
+            document.getElementById("todo-count").textContent = String(openTodos);
+            document.getElementById("note-count").textContent = String(state.notes.length);
+            document.getElementById("interaction-count").textContent = String(state.interactions.length);
+            document.getElementById("device-mode").textContent = state.device?.mode || "-";
+            document.getElementById("health-status").textContent = state.health?.status === "ok"
+                ? "Backend healthy"
+                : "Backend status unavailable";
+        }
+
+        function renderTodos() {
+            const root = document.getElementById("todo-list");
+            if (!state.todos.length) {
+                root.innerHTML = '<div class="empty">No to-dos yet. Add one here or say “todo: ...” on the device.</div>';
+                return;
+            }
+
+            root.innerHTML = state.todos.map((item) => {
+                const done = Boolean(item.is_complete);
+                return `
+                    <article class="item">
+                        <div class="item-top">
+                            <div>
+                                <div class="item-title ${done ? "done" : ""}">${escapeHtml(item.title)}</div>
+                                <div class="item-meta">
+                                    Created ${escapeHtml(formatDate(item.created_at))}
+                                    ${done && item.completed_at ? `<br>Completed ${escapeHtml(formatDate(item.completed_at))}` : ""}
+                                </div>
+                            </div>
+                            ${done
+                                ? '<span class="pill done">Done</span>'
+                                : `<button class="ghost" type="button" data-complete-id="${item.id}">Mark Done</button>`}
+                        </div>
+                    </article>
+                `;
+            }).join("");
+
+            root.querySelectorAll("[data-complete-id]").forEach((button) => {
+                button.addEventListener("click", async () => {
+                    const todoId = button.getAttribute("data-complete-id");
+                    try {
+                        await apiPost(`/api/todos/${todoId}/complete`, {});
+                        setFlash("todo-flash", "Marked to-do complete.", "success");
+                        await refreshAll();
+                    } catch (error) {
+                        setFlash("todo-flash", error.message, "error");
+                    }
+                });
+            });
+        }
+
+        function renderNotes() {
+            const root = document.getElementById("note-list");
+            if (!state.notes.length) {
+                root.innerHTML = '<div class="empty">No notes saved yet.</div>';
+                return;
+            }
+
+            root.innerHTML = state.notes.map((item) => `
+                <article class="item">
+                    <div class="item-top">
+                        <div class="pill ok">${escapeHtml(item.source || "device")}</div>
+                        <div class="mini">${escapeHtml(formatDate(item.created_at))}</div>
+                    </div>
+                    <div class="item-meta" style="margin-top: 10px;">Summary</div>
+                    <div class="item-title">${escapeHtml(item.summary || "No summary stored")}</div>
+                    <div class="item-meta" style="margin-top: 10px;">Transcript</div>
+                    <div class="item-title">${escapeHtml(item.transcript)}</div>
+                </article>
+            `).join("");
+        }
+
+        function renderInteractions() {
+            const root = document.getElementById("interaction-list");
+            if (!state.interactions.length) {
+                root.innerHTML = '<div class="empty">No interactions logged yet.</div>';
+                return;
+            }
+
+            root.innerHTML = state.interactions.map((item) => `
+                <article class="item">
+                    <div class="item-top">
+                        <span class="pill ${item.status === "completed" ? "ok" : ""}">${escapeHtml(item.status)}</span>
+                        <span class="mini">${escapeHtml(formatDate(item.created_at))}</span>
+                    </div>
+                    <div class="item-meta" style="margin-top: 10px;">Transcript</div>
+                    <div class="item-title">${escapeHtml(item.transcript || "(none)")}</div>
+                    <div class="item-meta" style="margin-top: 10px;">Assistant Response</div>
+                    <div class="item-title">${escapeHtml(item.assistant_response || "(none)")}</div>
+                </article>
+            `).join("");
+        }
+
+        function renderDeviceState() {
+            const root = document.getElementById("device-state");
+            if (!state.device) {
+                root.innerHTML = '<div class="empty">Device state unavailable.</div>';
+                return;
+            }
+
+            const todoPreview = (state.device.todo_preview || []).map((item) => `
+                <div class="item">
+                    <div class="item-title">${escapeHtml(item.title)}</div>
+                </div>
+            `).join("");
+
+            root.innerHTML = `
+                <article class="item">
+                    <div class="item-top">
+                        <span class="pill ok">Mode: ${escapeHtml(state.device.mode || "-")}</span>
+                        <span class="mini">${escapeHtml(state.device.status || "")}</span>
+                    </div>
+                    <div class="item-meta" style="margin-top: 10px;">Last Note</div>
+                    <div class="item-title">${escapeHtml(state.device.last_note?.summary || state.device.last_note?.transcript || "No recent note")}</div>
+                </article>
+                ${todoPreview || '<div class="empty">No open to-do preview for the device.</div>'}
+            `;
+        }
+
+        function renderAll() {
+            renderStats();
+            renderTodos();
+            renderNotes();
+            renderInteractions();
+            renderDeviceState();
+        }
+
+        async function refreshAll() {
+            const [health, todos, notes, interactions, device] = await Promise.all([
+                apiGet("/healthz"),
+                apiGet("/api/todos"),
+                apiGet("/api/notes"),
+                apiGet("/api/interactions"),
+                apiGet("/api/device/state"),
+            ]);
+
+            state.health = health;
+            state.todos = todos.items || [];
+            state.notes = notes.items || [];
+            state.interactions = interactions.items || [];
+            state.device = device;
+            renderAll();
+        }
+
+        document.getElementById("todo-form").addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const title = document.getElementById("todo-title").value.trim();
+            if (!title) {
+                setFlash("todo-flash", "Please enter a to-do title.", "error");
+                return;
+            }
+
+            try {
+                await apiPost("/api/todos", { title });
+                document.getElementById("todo-title").value = "";
+                setFlash("todo-flash", "To-do created.", "success");
+                await refreshAll();
+            } catch (error) {
+                setFlash("todo-flash", error.message, "error");
+            }
+        });
+
+        document.getElementById("note-form").addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const transcript = document.getElementById("note-transcript").value.trim();
+            const summary = document.getElementById("note-summary").value.trim();
+            if (!transcript) {
+                setFlash("note-flash", "Please enter note text.", "error");
+                return;
+            }
+
+            try {
+                await apiPost("/api/notes", {
+                    transcript,
+                    summary,
+                    source: "dashboard",
+                });
+                document.getElementById("note-transcript").value = "";
+                document.getElementById("note-summary").value = "";
+                setFlash("note-flash", "Note saved.", "success");
+                await refreshAll();
+            } catch (error) {
+                setFlash("note-flash", error.message, "error");
+            }
+        });
+
+        document.getElementById("refresh-all").addEventListener("click", refreshAll);
+        document.getElementById("refresh-notes").addEventListener("click", refreshAll);
+
+        refreshAll().catch((error) => {
+            document.getElementById("health-status").textContent = "Backend request failed";
+            setFlash("todo-flash", error.message, "error");
+            setFlash("note-flash", error.message, "error");
+        });
+    </script>
 </body>
 </html>
