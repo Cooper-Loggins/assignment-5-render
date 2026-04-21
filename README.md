@@ -43,6 +43,13 @@ This repository contains the Assignment 5 implementation for the smart voice ass
 - Allows manual note creation
 - Shows recent assistant sessions and the compact device snapshot
 
+## Current firmware behavior
+
+- Streams audio to `WS /ws/assistant`
+- Polls `GET /api/device/state` for the compact to-do preview
+- Shows a to-do screen and an assistant-response screen on the M5Stick
+- Uses the current backend contract, but does not send device auth yet
+
 ## Local development
 
 Install dependencies:
