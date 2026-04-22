@@ -251,6 +251,7 @@
 
         .card {
             padding: 24px;
+            position: relative;
         }
 
         .section-head {
@@ -264,6 +265,34 @@
         .section-head h2 {
             font-size: 1.3rem;
             letter-spacing: -0.02em;
+        }
+
+        .section-kicker {
+            margin-bottom: 14px;
+            color: var(--accent);
+            font-size: 0.76rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            font-family: "Avenir Next", "Segoe UI", sans-serif;
+            font-weight: 700;
+        }
+
+        .card::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 24px;
+            right: 24px;
+            height: 1px;
+            background: linear-gradient(90deg, rgba(180, 90, 43, 0.24), transparent);
+        }
+
+        .form-shell {
+            padding: 16px;
+            border-radius: 18px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 248, 242, 0.92));
+            border: 1px solid var(--line);
+            margin-bottom: 12px;
         }
 
         .mini {
@@ -348,6 +377,18 @@
             border-radius: 18px;
             background: rgba(255, 255, 255, 0.84);
             box-shadow: var(--shadow-soft);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .item::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 5px;
+            height: 100%;
+            background: rgba(180, 90, 43, 0.18);
         }
 
         .item-top {
@@ -371,6 +412,29 @@
             margin-top: 8px;
             color: var(--muted);
             font-size: 0.88rem;
+            font-family: "Avenir Next", "Segoe UI", sans-serif;
+        }
+
+        .todo-item::before {
+            background: rgba(180, 90, 43, 0.22);
+        }
+
+        .note-item::before {
+            background: rgba(47, 125, 76, 0.22);
+        }
+
+        .interaction-item::before {
+            background: rgba(67, 94, 168, 0.2);
+        }
+
+        .device-item::before {
+            background: rgba(130, 102, 44, 0.2);
+        }
+
+        .item-block {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(87, 71, 53, 0.08);
         }
 
         .pill {
@@ -542,20 +606,24 @@
             <section class="grid">
                 <div class="stack">
                     <article class="panel card">
+                        <div class="section-kicker">Planner</div>
                         <div class="section-head">
                             <h2>To-Do List</h2>
                             <span class="mini">Create items here or by voice prefix</span>
                         </div>
-                        <form id="todo-form">
-                            <label for="todo-title">New task</label>
-                            <input id="todo-title" name="title" maxlength="160" placeholder="Finish the dashboard layout">
-                            <button class="primary" type="submit">Add To-Do</button>
-                        </form>
+                        <div class="form-shell">
+                            <form id="todo-form">
+                                <label for="todo-title">New task</label>
+                                <input id="todo-title" name="title" maxlength="160" placeholder="Finish the dashboard layout">
+                                <button class="primary" type="submit">Add To-Do</button>
+                            </form>
+                        </div>
                         <div class="flash" id="todo-flash"></div>
                         <div class="list" id="todo-list"></div>
                     </article>
 
                     <article class="panel card">
+                        <div class="section-kicker">Wearable Sync</div>
                         <div class="section-head">
                             <h2>Device Snapshot</h2>
                             <span class="mini">Compact state returned to the M5Stick</span>
@@ -565,17 +633,20 @@
                 </div>
 
                 <article class="panel card">
+                    <div class="section-kicker">Capture</div>
                     <div class="section-head">
                         <h2>Notes</h2>
                         <span class="mini">Manual entries and captured voice transcripts</span>
                     </div>
-                    <form id="note-form">
-                        <label for="note-transcript">Transcript / note text</label>
-                        <textarea id="note-transcript" name="transcript" placeholder="Remember to bring the demo hardware on Wednesday."></textarea>
-                        <label for="note-summary">Optional summary</label>
-                        <input id="note-summary" name="summary" maxlength="160" placeholder="Hardware reminder">
-                        <button class="primary" type="submit">Save Note</button>
-                    </form>
+                    <div class="form-shell">
+                        <form id="note-form">
+                            <label for="note-transcript">Transcript / note text</label>
+                            <textarea id="note-transcript" name="transcript" placeholder="Remember to bring the demo hardware on Wednesday."></textarea>
+                            <label for="note-summary">Optional summary</label>
+                            <input id="note-summary" name="summary" maxlength="160" placeholder="Hardware reminder">
+                            <button class="primary" type="submit">Save Note</button>
+                        </form>
+                    </div>
                     <div class="flash" id="note-flash"></div>
                     <div class="toolbar">
                         <span class="mini">Most recent first</span>
@@ -588,6 +659,7 @@
 
                 <article class="stack">
                     <div class="panel card">
+                        <div class="section-kicker">Audit Trail</div>
                         <div class="section-head">
                             <h2>Recent Assistant History</h2>
                             <span class="mini">Stored interaction log</span>
@@ -678,7 +750,7 @@
             root.innerHTML = state.todos.map((item) => {
                 const done = Boolean(item.is_complete);
                 return `
-                    <article class="item">
+                    <article class="item todo-item">
                         <div class="item-top">
                             <div>
                                 <div class="item-title ${done ? "done" : ""}">${escapeHtml(item.title)}</div>
@@ -717,15 +789,19 @@
             }
 
             root.innerHTML = state.notes.map((item) => `
-                <article class="item">
+                <article class="item note-item">
                     <div class="item-top">
                         <div class="pill ok">${escapeHtml(item.source || "device")}</div>
                         <div class="mini">${escapeHtml(formatDate(item.created_at))}</div>
                     </div>
-                    <div class="item-meta" style="margin-top: 10px;">Summary</div>
-                    <div class="item-title">${escapeHtml(item.summary || "No summary stored")}</div>
-                    <div class="item-meta" style="margin-top: 10px;">Transcript</div>
-                    <div class="item-title">${escapeHtml(item.transcript)}</div>
+                    <div class="item-block">
+                        <div class="item-meta">Summary</div>
+                        <div class="item-title">${escapeHtml(item.summary || "No summary stored")}</div>
+                    </div>
+                    <div class="item-block">
+                        <div class="item-meta">Transcript</div>
+                        <div class="item-title">${escapeHtml(item.transcript)}</div>
+                    </div>
                 </article>
             `).join("");
         }
@@ -738,15 +814,19 @@
             }
 
             root.innerHTML = state.interactions.map((item) => `
-                <article class="item">
+                <article class="item interaction-item">
                     <div class="item-top">
                         <span class="pill ${item.status === "completed" ? "ok" : ""}">${escapeHtml(item.status)}</span>
                         <span class="mini">${escapeHtml(formatDate(item.created_at))}</span>
                     </div>
-                    <div class="item-meta" style="margin-top: 10px;">Transcript</div>
-                    <div class="item-title">${escapeHtml(item.transcript || "(none)")}</div>
-                    <div class="item-meta" style="margin-top: 10px;">Assistant Response</div>
-                    <div class="item-title">${escapeHtml(item.assistant_response || "(none)")}</div>
+                    <div class="item-block">
+                        <div class="item-meta">Transcript</div>
+                        <div class="item-title">${escapeHtml(item.transcript || "(none)")}</div>
+                    </div>
+                    <div class="item-block">
+                        <div class="item-meta">Assistant Response</div>
+                        <div class="item-title">${escapeHtml(item.assistant_response || "(none)")}</div>
+                    </div>
                 </article>
             `).join("");
         }
@@ -765,13 +845,15 @@
             `).join("");
 
             root.innerHTML = `
-                <article class="item">
+                <article class="item device-item">
                     <div class="item-top">
                         <span class="pill ok">Mode: ${escapeHtml(state.device.mode || "-")}</span>
                         <span class="mini">${escapeHtml(state.device.status || "")}</span>
                     </div>
-                    <div class="item-meta" style="margin-top: 10px;">Last Note</div>
-                    <div class="item-title">${escapeHtml(state.device.last_note?.summary || state.device.last_note?.transcript || "No recent note")}</div>
+                    <div class="item-block">
+                        <div class="item-meta">Last Note</div>
+                        <div class="item-title">${escapeHtml(state.device.last_note?.summary || state.device.last_note?.transcript || "No recent note")}</div>
+                    </div>
                 </article>
                 ${todoPreview || '<div class="empty">No open to-do preview for the device.</div>'}
             `;
