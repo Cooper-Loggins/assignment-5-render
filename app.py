@@ -565,29 +565,32 @@ def create_app():
             ws.send("D")
             return
 
-        interaction = db.insert_interaction(status="connected")
+        interaction = None
         audio_buffer = bytearray()
         recording = False
 
         while True:
             message = ws.receive()
             if message is None:
-                db.update_interaction(interaction["id"], status="closed")
+                if interaction is not None:
+                    db.update_interaction(interaction["id"], status="closed")
                 break
 
             if isinstance(message, str):
                 if message == "start":
+                    interaction = db.insert_interaction(status="recording")
                     audio_buffer.clear()
                     recording = True
-                    db.update_interaction(interaction["id"], status="recording")
 
                 elif message == "stop":
                     recording = False
                     if len(audio_buffer) < MIN_AUDIO_BYTES:
-                        db.update_interaction(interaction["id"], status="too_short")
+                        if interaction is not None:
+                            db.update_interaction(interaction["id"], status="too_short")
                         ws.send("T:(too short)")
                         ws.send("R:Hold the button a little longer and try again.")
                         ws.send("D")
+                        interaction = None
                         continue
 
                     try:
@@ -607,17 +610,17 @@ def create_app():
                         assistant_response = f"Error generating response: {exc}"
                         status = "error"
 
-                    db.update_interaction(
-                        interaction["id"],
-                        transcript=transcript,
-                        assistant_response=assistant_response,
-                        status=status,
-                    )
+                    if interaction is not None:
+                        db.update_interaction(
+                            interaction["id"],
+                            transcript=transcript,
+                            assistant_response=assistant_response,
+                            status=status,
+                        )
 
                     ws.send(f"R:{assistant_response}")
                     ws.send("D")
-
-                    interaction = db.insert_interaction(status="connected")
+                    interaction = None
 
             elif isinstance(message, bytes) and recording:
                 audio_buffer.extend(message)
