@@ -79,3 +79,11 @@ The project will be built from the voice-assistant prototype direction rather th
 5. Server stores a note and interaction row
 6. Server optionally creates a todo from simple command prefixes
 7. Server sends transcript and assistant response back to the device
+
+## Creative extension behavior
+
+- For longer voice notes, the backend asks the LLM for:
+  - a concise note summary
+  - an optional actionable todo title
+- The summary is stored in `notes.summary`
+- If the LLM extracts a task, a dashboard todo is created automatically

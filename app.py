@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import urllib.request
 from functools import wraps
 from hmac import compare_digest
@@ -62,6 +63,71 @@ def local_summary(text):
     return clean[:77].rstrip() + "..."
 
 
+def get_llm_client():
+    api_key = os.environ.get("VERTEX_API_KEY")
+    if not api_key:
+        return None
+    return genai.Client(vertexai=True, api_key=api_key)
+
+
+def extract_json_object(text):
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if not match:
+        return {}
+    try:
+        return json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return {}
+
+
+def analyze_voice_note(transcript):
+    clean = " ".join(transcript.split())
+    fallback = {
+        "summary": local_summary(clean),
+        "todo_title": None,
+    }
+
+    if len(clean.split()) < 12:
+        return fallback
+
+    client = get_llm_client()
+    if client is None:
+        return fallback
+
+    prompt = (
+        "Analyze this voice note. Return strict JSON with exactly two keys: "
+        '"summary" and "todo_title". '
+        '"summary" must be a concise dashboard-ready summary under 90 characters. '
+        '"todo_title" must be either a short actionable todo title under 70 characters '
+        'or null if the note does not clearly imply a task.\n\n'
+        f"Voice note:\n{clean}"
+    )
+
+    response = client.models.generate_content(
+        model=LLM_MODEL,
+        contents=prompt,
+        config=genai.types.GenerateContentConfig(
+            system_instruction=(
+                "You extract concise summaries and possible follow-up tasks from notes. "
+                "Always return valid JSON only."
+            ),
+        ),
+    )
+
+    parsed = extract_json_object((response.text or "").strip())
+    summary = (parsed.get("summary") or "").strip()
+    todo_title = parsed.get("todo_title")
+    if isinstance(todo_title, str):
+        todo_title = todo_title.strip() or None
+    else:
+        todo_title = None
+
+    return {
+        "summary": summary or fallback["summary"],
+        "todo_title": todo_title,
+    }
+
+
 def maybe_create_todo(transcript):
     lowered = transcript.lower().strip()
     prefixes = [
@@ -92,8 +158,8 @@ def build_fallback_response(transcript, created_todo):
 
 
 def generate_assistant_response(transcript, created_todo):
-    api_key = os.environ.get("VERTEX_API_KEY")
-    if not api_key:
+    client = get_llm_client()
+    if client is None:
         return build_fallback_response(transcript, created_todo)
 
     prompt = transcript
@@ -104,7 +170,6 @@ def generate_assistant_response(transcript, created_todo):
             "Acknowledge that briefly."
         )
 
-    client = genai.Client(vertexai=True, api_key=api_key)
     response = client.models.generate_content(
         model=LLM_MODEL,
         contents=prompt,
@@ -293,13 +358,19 @@ def create_app():
 
                     ws.send(f"T:{transcript}")
 
-                    summary = local_summary(transcript)
+                    note_analysis = analyze_voice_note(transcript)
+                    summary = note_analysis["summary"]
+                    extracted_todo_title = note_analysis["todo_title"]
+
+                    created_todo = maybe_create_todo(transcript)
+                    if created_todo is None and extracted_todo_title:
+                        created_todo = db.insert_todo(extracted_todo_title)
+
                     db.insert_note(
                         transcript=transcript,
                         summary=summary,
                         source="device",
                     )
-                    created_todo = maybe_create_todo(transcript)
 
                     try:
                         assistant_response = generate_assistant_response(transcript, created_todo)
