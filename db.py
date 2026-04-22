@@ -177,6 +177,22 @@ def fetch_note(note_id):
     return dict(row) if row else None
 
 
+def delete_note(note_id):
+    db = get_db()
+    existing = fetch_note(note_id)
+    if existing is None:
+        return None
+    db.execute("DELETE FROM notes WHERE id = ?", (note_id,))
+    db.commit()
+    return existing
+
+
+def clear_notes():
+    db = get_db()
+    db.execute("DELETE FROM notes")
+    db.commit()
+
+
 def insert_note(transcript, summary=None, audio_path=None, source="device"):
     db = get_db()
     cursor = db.execute(
@@ -210,6 +226,19 @@ def fetch_interactions(limit=None):
         query += " LIMIT ?"
         params.append(limit)
     return rows_to_dicts(db.execute(query, params).fetchall())
+
+
+def fetch_interaction(interaction_id):
+    db = get_db()
+    row = db.execute(
+        """
+        SELECT id, transcript, assistant_response, status, created_at
+        FROM interactions
+        WHERE id = ?
+        """,
+        (interaction_id,),
+    ).fetchone()
+    return dict(row) if row else None
 
 
 def insert_interaction(transcript=None, assistant_response=None, status="received"):
@@ -272,3 +301,19 @@ def update_interaction(interaction_id, transcript=None, assistant_response=None,
         (interaction_id,),
     ).fetchone()
     return dict(row)
+
+
+def delete_interaction(interaction_id):
+    db = get_db()
+    existing = fetch_interaction(interaction_id)
+    if existing is None:
+        return None
+    db.execute("DELETE FROM interactions WHERE id = ?", (interaction_id,))
+    db.commit()
+    return existing
+
+
+def clear_interactions():
+    db = get_db()
+    db.execute("DELETE FROM interactions")
+    db.commit()

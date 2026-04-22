@@ -684,6 +684,7 @@
                     <div class="toolbar">
                         <span class="mini">Most recent first</span>
                         <div class="toolbar-actions">
+                            <button class="danger" type="button" id="clear-notes">Clear Notes</button>
                             <button class="ghost" type="button" id="refresh-notes">Refresh Notes</button>
                         </div>
                     </div>
@@ -700,6 +701,7 @@
                         <div class="toolbar">
                             <span class="mini">Latest sessions</span>
                             <div class="toolbar-actions">
+                                <button class="danger" type="button" id="clear-interactions">Clear History</button>
                                 <button class="ghost" type="button" id="refresh-all">Refresh All</button>
                             </div>
                         </div>
@@ -891,8 +893,25 @@
                             <audio class="audio-player" controls preload="none" src="/api/notes/${item.id}/audio"></audio>
                         </div>
                     ` : ""}
+                    <div class="item-actions">
+                        <button class="danger inline-btn" type="button" data-delete-note-id="${item.id}">Delete Note</button>
+                    </div>
                 </article>
             `).join("");
+
+            root.querySelectorAll("[data-delete-note-id]").forEach((button) => {
+                button.addEventListener("click", async () => {
+                    const noteId = button.getAttribute("data-delete-note-id");
+                    if (!window.confirm("Delete this note and its saved audio?")) return;
+                    try {
+                        await apiPost(`/api/notes/${noteId}/delete`, {});
+                        setFlash("note-flash", "Note deleted.", "success");
+                        await refreshAll();
+                    } catch (error) {
+                        setFlash("note-flash", error.message, "error");
+                    }
+                });
+            });
         }
 
         function renderInteractions() {
@@ -916,8 +935,24 @@
                         <div class="item-meta">Assistant Response</div>
                         <div class="item-title">${escapeHtml(item.assistant_response || "(none)")}</div>
                     </div>
+                    <div class="item-actions">
+                        <button class="danger inline-btn" type="button" data-delete-interaction-id="${item.id}">Delete Entry</button>
+                    </div>
                 </article>
             `).join("");
+
+            root.querySelectorAll("[data-delete-interaction-id]").forEach((button) => {
+                button.addEventListener("click", async () => {
+                    const interactionId = button.getAttribute("data-delete-interaction-id");
+                    if (!window.confirm("Delete this interaction entry?")) return;
+                    try {
+                        await apiPost(`/api/interactions/${interactionId}/delete`, {});
+                        await refreshAll();
+                    } catch (error) {
+                        setFlash("note-flash", error.message, "error");
+                    }
+                });
+            });
         }
 
         function renderDeviceState() {
@@ -1039,6 +1074,26 @@
 
         document.getElementById("refresh-all").addEventListener("click", refreshAll);
         document.getElementById("refresh-notes").addEventListener("click", refreshAll);
+        document.getElementById("clear-notes").addEventListener("click", async () => {
+            if (!window.confirm("Clear all notes and saved audio files?")) return;
+            try {
+                await apiPost("/api/notes/clear", {});
+                setFlash("note-flash", "Notes cleared.", "success");
+                await refreshAll();
+            } catch (error) {
+                setFlash("note-flash", error.message, "error");
+            }
+        });
+        document.getElementById("clear-interactions").addEventListener("click", async () => {
+            if (!window.confirm("Clear the full assistant interaction history?")) return;
+            try {
+                await apiPost("/api/interactions/clear", {});
+                setFlash("note-flash", "Interaction history cleared.", "success");
+                await refreshAll();
+            } catch (error) {
+                setFlash("note-flash", error.message, "error");
+            }
+        });
 
         refreshAll().catch((error) => {
             document.getElementById("health-status").textContent = "Backend request failed";

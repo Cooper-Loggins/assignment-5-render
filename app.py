@@ -90,6 +90,14 @@ def resolve_audio_path(relative_path):
     return os.path.join(os.path.dirname(__file__), "media", relative_path)
 
 
+def remove_audio_file(relative_path):
+    if not relative_path:
+        return
+    full_path = resolve_audio_path(relative_path)
+    if os.path.exists(full_path):
+        os.remove(full_path)
+
+
 def read_uploaded_audio(upload):
     if upload is None or not upload.filename:
         raise ValueError("audio file is required")
@@ -488,10 +496,41 @@ def create_app():
             return jsonify({"status": "error", "message": "audio file missing"}), 404
         return send_file(full_path, mimetype="audio/wav", conditional=True)
 
+    @app.post("/api/notes/<int:note_id>/delete")
+    @require_dashboard_auth
+    def delete_note(note_id):
+        note = db.delete_note(note_id)
+        if note is None:
+            return jsonify({"status": "error", "message": "note not found"}), 404
+        remove_audio_file(note.get("audio_path"))
+        return jsonify({"status": "deleted", "item": note})
+
+    @app.post("/api/notes/clear")
+    @require_dashboard_auth
+    def clear_notes():
+        for note in db.fetch_notes():
+            remove_audio_file(note.get("audio_path"))
+        db.clear_notes()
+        return jsonify({"status": "ok"})
+
     @app.get("/api/interactions")
     @require_dashboard_auth
     def list_interactions():
         return jsonify({"items": db.fetch_interactions(), "status": "ok"})
+
+    @app.post("/api/interactions/<int:interaction_id>/delete")
+    @require_dashboard_auth
+    def delete_interaction(interaction_id):
+        item = db.delete_interaction(interaction_id)
+        if item is None:
+            return jsonify({"status": "error", "message": "interaction not found"}), 404
+        return jsonify({"status": "deleted", "item": item})
+
+    @app.post("/api/interactions/clear")
+    @require_dashboard_auth
+    def clear_interactions():
+        db.clear_interactions()
+        return jsonify({"status": "ok"})
 
     @app.get("/api/device/state")
     def device_state():
