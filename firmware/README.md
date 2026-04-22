@@ -2,8 +2,9 @@
 
 `firmware.ino` is the current Assignment 5 sketch for the M5StickC Plus 2.
 
-`wifi_setup.ino` is a temporary setup sketch that stores Wi-Fi credentials in
-ESP32 Preferences and immediately tests whether the M5 can connect.
+`wifi_setup/wifi_setup.ino` is a temporary setup sketch that stores Wi-Fi
+credentials in ESP32 Preferences and immediately tests whether the M5 can
+connect.
 
 Current behavior:
 
@@ -26,5 +27,5 @@ Before flashing:
 - update `DEVICE_STATE_URL`
 - update `DEVICE_API_KEY` to match the server `.env`
 - make sure your public deployment is running over HTTPS / WSS
-- if the M5 shows `No WiFi`, flash `wifi_setup.ino` first, confirm it says
-  `Connected OK`, then reflash `firmware.ino`
+- if the M5 shows `No WiFi`, open and flash `wifi_setup/wifi_setup.ino` first,
+  confirm it says `Connected OK`, then reopen and reflash `firmware.ino`
