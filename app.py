@@ -290,13 +290,19 @@ def create_app():
         if not transcript:
             return jsonify({"status": "error", "message": "transcript is required"}), 400
 
+        note_analysis = analyze_voice_note(transcript)
+        summary = (payload.get("summary") or "").strip() or note_analysis["summary"]
+        created_todo = None
+        if note_analysis["todo_title"]:
+            created_todo = db.insert_todo(note_analysis["todo_title"])
+
         item = db.insert_note(
             transcript=transcript,
-            summary=(payload.get("summary") or "").strip() or None,
+            summary=summary,
             audio_path=(payload.get("audio_path") or "").strip() or None,
             source=(payload.get("source") or "device").strip() or "device",
         )
-        return jsonify({"status": "created", "item": item}), 201
+        return jsonify({"status": "created", "item": item, "created_todo": created_todo}), 201
 
     @app.get("/api/interactions")
     @require_dashboard_auth
