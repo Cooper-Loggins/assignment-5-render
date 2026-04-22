@@ -157,6 +157,10 @@ def device_unauthorized():
     return jsonify({"status": "error", "message": "invalid device api key"}), 401
 
 
+def device_or_dashboard_auth_is_valid():
+    return device_api_key_is_valid() or dashboard_auth_is_valid()
+
+
 def create_app():
     app = Flask(__name__)
     app.config["SECRET_KEY"] = os.environ.get("APP_SECRET_KEY", "dev-secret")
@@ -236,7 +240,7 @@ def create_app():
 
     @app.get("/api/device/state")
     def device_state():
-        if not device_api_key_is_valid():
+        if not device_or_dashboard_auth_is_valid():
             return device_unauthorized()
 
         todos = db.fetch_todos(limit=5, include_completed=False)

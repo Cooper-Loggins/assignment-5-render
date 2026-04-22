@@ -54,6 +54,7 @@ This repository contains the Assignment 5 implementation for the smart voice ass
 
 - Dashboard routes and dashboard JSON APIs require HTTP Basic Auth
 - Device endpoints require an `X-Device-API-Key` header
+- `/api/device/state` also allows dashboard Basic Auth so the browser UI can load the device snapshot
 - Health check remains open for simple deployment verification
 
 ## Local development
