@@ -5,7 +5,7 @@ import urllib.request
 from functools import wraps
 from hmac import compare_digest
 
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request, session
 from flask_sock import Sock
 from google import genai
 
@@ -220,6 +220,9 @@ def dashboard_unauthorized():
 
 
 def dashboard_auth_is_valid():
+    if session.get("dashboard_authenticated") is True:
+        return True
+
     auth = request.authorization
     expected_user = os.environ.get("DASHBOARD_USERNAME", "admin")
     expected_password = os.environ.get("DASHBOARD_PASSWORD", "replace_me")
@@ -271,6 +274,7 @@ def create_app():
     @app.get("/")
     @require_dashboard_auth
     def dashboard():
+        session["dashboard_authenticated"] = True
         return render_template("dashboard.html")
 
     @app.get("/api/todos")
