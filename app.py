@@ -87,7 +87,7 @@ def analyze_voice_note(transcript):
         "todo_title": None,
     }
 
-    if len(clean.split()) < 12:
+    if len(clean.split()) < 8:
         return fallback
 
     client = get_llm_client()
@@ -129,13 +129,23 @@ def analyze_voice_note(transcript):
 
 
 def maybe_create_todo(transcript):
-    lowered = transcript.lower().strip()
+    lowered = " ".join(transcript.lower().strip().split())
     prefixes = [
         "todo ",
         "todo:",
+        "to do ",
+        "to do:",
+        "to-do ",
+        "to-do:",
         "add todo ",
         "add a todo ",
+        "add to do ",
+        "add a to do ",
         "remember to ",
+        "remind me to ",
+        "i need to ",
+        "don't let me forget to ",
+        "do not let me forget to ",
     ]
     for prefix in prefixes:
         if lowered.startswith(prefix):
