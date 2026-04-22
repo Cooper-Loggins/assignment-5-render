@@ -247,7 +247,9 @@ def require_dashboard_auth(view_func):
 
 def device_api_key_is_valid():
     expected_key = os.environ.get("DEVICE_API_KEY", "replace_me")
-    provided_key = request.headers.get("X-Device-API-Key", "")
+    provided_key = request.headers.get("X-Device-API-Key", "") or request.args.get(
+        "api_key", ""
+    )
     return compare_digest(provided_key, expected_key)
 
 

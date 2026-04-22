@@ -21,10 +21,10 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 
-#define SERVER_HOST "sports-absently-twice.ngrok-free.dev"
+#define SERVER_HOST "assignment-5-dashboard.onrender.com"
 #define SERVER_PORT 443
-#define WS_PATH "/ws/assistant"
-#define DEVICE_STATE_URL "https://sports-absently-twice.ngrok-free.dev/api/device/state"
+#define WS_PATH "/ws/assistant?api_key=" DEVICE_API_KEY
+#define DEVICE_STATE_URL "https://assignment-5-dashboard.onrender.com/api/device/state"
 // TODO before submission: replace this hard-coded test key with your final device API key.
 #define DEVICE_API_KEY "Cooperlee7"
 
@@ -350,8 +350,6 @@ void setup() {
   M5.Mic.begin();
 
   ws.beginSSL(SERVER_HOST, SERVER_PORT, WS_PATH);
-  wsExtraHeaders = "X-Device-API-Key: " + String(DEVICE_API_KEY) + "\r\n";
-  ws.setExtraHeaders(wsExtraHeaders.c_str());
   ws.onEvent(onWebSocket);
   ws.setReconnectInterval(3000);
 
