@@ -21,10 +21,10 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 
-#define SERVER_HOST "your-public-hostname.example.com"
+#define SERVER_HOST "sports-absently-twice.ngrok-free.dev"
 #define SERVER_PORT 443
 #define WS_PATH "/ws/assistant"
-#define DEVICE_STATE_URL "https://your-public-hostname.example.com/api/device/state"
+#define DEVICE_STATE_URL "https://sports-absently-twice.ngrok-free.dev/api/device/state"
 #define DEVICE_API_KEY "replace_me"
 
 #define SAMPLE_RATE 16000
