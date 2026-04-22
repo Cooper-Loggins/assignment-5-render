@@ -112,6 +112,20 @@ def fetch_todo(todo_id):
     return dict(row) if row else None
 
 
+def update_todo_title(todo_id, title):
+    db = get_db()
+    db.execute(
+        """
+        UPDATE todos
+        SET title = ?
+        WHERE id = ?
+        """,
+        (title, todo_id),
+    )
+    db.commit()
+    return fetch_todo(todo_id)
+
+
 def mark_todo_complete(todo_id):
     db = get_db()
     db.execute(
@@ -126,6 +140,16 @@ def mark_todo_complete(todo_id):
     return fetch_todo(todo_id)
 
 
+def delete_todo(todo_id):
+    db = get_db()
+    existing = fetch_todo(todo_id)
+    if existing is None:
+        return None
+    db.execute("DELETE FROM todos WHERE id = ?", (todo_id,))
+    db.commit()
+    return existing
+
+
 def fetch_notes(limit=None):
     db = get_db()
     query = """
@@ -138,6 +162,19 @@ def fetch_notes(limit=None):
         query += " LIMIT ?"
         params.append(limit)
     return rows_to_dicts(db.execute(query, params).fetchall())
+
+
+def fetch_note(note_id):
+    db = get_db()
+    row = db.execute(
+        """
+        SELECT id, transcript, summary, audio_path, source, created_at
+        FROM notes
+        WHERE id = ?
+        """,
+        (note_id,),
+    ).fetchone()
+    return dict(row) if row else None
 
 
 def insert_note(transcript, summary=None, audio_path=None, source="device"):

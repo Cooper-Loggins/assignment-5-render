@@ -485,6 +485,32 @@
             flex-wrap: wrap;
         }
 
+        .item-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+
+        .inline-btn {
+            padding: 8px 12px;
+            border-radius: 999px;
+            font-size: 0.86rem;
+        }
+
+        .danger {
+            background: rgba(165, 40, 40, 0.1);
+            color: #8d1f1f;
+            border: 1px solid rgba(165, 40, 40, 0.15);
+            font-weight: 700;
+            font-family: "Avenir Next", "Segoe UI", sans-serif;
+        }
+
+        .audio-player {
+            width: 100%;
+            margin-top: 10px;
+        }
+
         .flash {
             min-height: 1.3rem;
             font-size: 0.92rem;
@@ -647,6 +673,13 @@
                             <button class="primary" type="submit">Save Note</button>
                         </form>
                     </div>
+                    <div class="form-shell">
+                        <form id="audio-upload-form">
+                            <label for="audio-file">Upload WAV audio for transcription</label>
+                            <input id="audio-file" name="audio" type="file" accept=".wav,audio/wav">
+                            <button class="ghost" type="submit">Upload Audio</button>
+                        </form>
+                    </div>
                     <div class="flash" id="note-flash"></div>
                     <div class="toolbar">
                         <span class="mini">Most recent first</span>
@@ -729,6 +762,18 @@
             return data;
         }
 
+        async function apiPostForm(url, formData) {
+            const response = await fetch(url, {
+                method: "POST",
+                body: formData,
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.message || `POST ${url} failed with ${response.status}`);
+            }
+            return data;
+        }
+
         function renderStats() {
             const openTodos = state.todos.filter((item) => !item.is_complete).length;
             document.getElementById("todo-count").textContent = String(openTodos);
@@ -758,10 +803,13 @@
                                     Created ${escapeHtml(formatDate(item.created_at))}
                                     ${done && item.completed_at ? `<br>Completed ${escapeHtml(formatDate(item.completed_at))}` : ""}
                                 </div>
+                                <div class="item-actions">
+                                    ${done ? "" : `<button class="ghost inline-btn" type="button" data-complete-id="${item.id}">Mark Done</button>`}
+                                    <button class="ghost inline-btn" type="button" data-edit-id="${item.id}" data-edit-title="${escapeHtml(item.title)}">Edit</button>
+                                    <button class="danger inline-btn" type="button" data-delete-id="${item.id}">Delete</button>
+                                </div>
                             </div>
-                            ${done
-                                ? '<span class="pill done">Done</span>'
-                                : `<button class="ghost" type="button" data-complete-id="${item.id}">Mark Done</button>`}
+                            ${done ? '<span class="pill done">Done</span>' : '<span class="pill">Open</span>'}
                         </div>
                     </article>
                 `;
@@ -773,6 +821,41 @@
                     try {
                         await apiPost(`/api/todos/${todoId}/complete`, {});
                         setFlash("todo-flash", "Marked to-do complete.", "success");
+                        await refreshAll();
+                    } catch (error) {
+                        setFlash("todo-flash", error.message, "error");
+                    }
+                });
+            });
+
+            root.querySelectorAll("[data-edit-id]").forEach((button) => {
+                button.addEventListener("click", async () => {
+                    const todoId = button.getAttribute("data-edit-id");
+                    const currentTitle = button.getAttribute("data-edit-title") || "";
+                    const nextTitle = window.prompt("Edit to-do title", currentTitle);
+                    if (nextTitle === null) return;
+                    const title = nextTitle.trim();
+                    if (!title) {
+                        setFlash("todo-flash", "To-do title cannot be empty.", "error");
+                        return;
+                    }
+                    try {
+                        await apiPost(`/api/todos/${todoId}/edit`, { title });
+                        setFlash("todo-flash", "To-do updated.", "success");
+                        await refreshAll();
+                    } catch (error) {
+                        setFlash("todo-flash", error.message, "error");
+                    }
+                });
+            });
+
+            root.querySelectorAll("[data-delete-id]").forEach((button) => {
+                button.addEventListener("click", async () => {
+                    const todoId = button.getAttribute("data-delete-id");
+                    if (!window.confirm("Delete this to-do item?")) return;
+                    try {
+                        await apiPost(`/api/todos/${todoId}/delete`, {});
+                        setFlash("todo-flash", "To-do deleted.", "success");
                         await refreshAll();
                     } catch (error) {
                         setFlash("todo-flash", error.message, "error");
@@ -802,6 +885,12 @@
                         <div class="item-meta">Transcript</div>
                         <div class="item-title">${escapeHtml(item.transcript)}</div>
                     </div>
+                    ${item.audio_path ? `
+                        <div class="item-block">
+                            <div class="item-meta">Raw Audio</div>
+                            <audio class="audio-player" controls preload="none" src="/api/notes/${item.id}/audio"></audio>
+                        </div>
+                    ` : ""}
                 </article>
             `).join("");
         }
@@ -920,6 +1009,28 @@
                 document.getElementById("note-transcript").value = "";
                 document.getElementById("note-summary").value = "";
                 setFlash("note-flash", "Note saved.", "success");
+                await refreshAll();
+            } catch (error) {
+                setFlash("note-flash", error.message, "error");
+            }
+        });
+
+        document.getElementById("audio-upload-form").addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const fileInput = document.getElementById("audio-file");
+            const file = fileInput.files?.[0];
+            if (!file) {
+                setFlash("note-flash", "Choose a WAV file first.", "error");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("audio", file);
+
+            try {
+                await apiPostForm("/api/audio", formData);
+                fileInput.value = "";
+                setFlash("note-flash", "Audio uploaded and transcribed.", "success");
                 await refreshAll();
             } catch (error) {
                 setFlash("note-flash", error.message, "error");

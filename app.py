@@ -1,11 +1,14 @@
+import io
 import json
 import os
 import re
 import urllib.request
+import wave
+from datetime import datetime
 from functools import wraps
 from hmac import compare_digest
 
-from flask import Flask, Response, jsonify, render_template, request, session
+from flask import Flask, Response, jsonify, render_template, request, send_file, session
 from flask_sock import Sock
 from google import genai
 
@@ -18,6 +21,7 @@ SYSTEM_PROMPT = (
     "You are a helpful smart assistant for a small wearable screen. "
     "Be concise, practical, and under 80 words."
 )
+AUDIO_SUBDIR = "audio"
 
 
 def load_env_file(path=".env"):
@@ -55,6 +59,59 @@ def parse_last_json(text):
         except json.JSONDecodeError:
             break
     return last or {}
+
+
+def ensure_audio_dir():
+    media_root = os.path.join(os.path.dirname(__file__), "media", AUDIO_SUBDIR)
+    os.makedirs(media_root, exist_ok=True)
+    return media_root
+
+
+def build_audio_filename(source="device"):
+    stamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S-%f")
+    safe_source = re.sub(r"[^a-z0-9_-]+", "-", (source or "device").lower()).strip("-")
+    safe_source = safe_source or "device"
+    return f"{safe_source}-{stamp}.wav"
+
+
+def save_pcm_wav(audio_bytes, source="device"):
+    audio_dir = ensure_audio_dir()
+    filename = build_audio_filename(source)
+    full_path = os.path.join(audio_dir, filename)
+    with wave.open(full_path, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(SAMPLE_RATE)
+        wav_file.writeframes(audio_bytes)
+    return os.path.join(AUDIO_SUBDIR, filename)
+
+
+def resolve_audio_path(relative_path):
+    return os.path.join(os.path.dirname(__file__), "media", relative_path)
+
+
+def read_uploaded_audio(upload):
+    if upload is None or not upload.filename:
+        raise ValueError("audio file is required")
+
+    payload = upload.read()
+    if not payload:
+        raise ValueError("audio file is empty")
+
+    content_type = (upload.content_type or "").lower()
+    filename = upload.filename.lower()
+
+    if payload[:4] == b"RIFF" or content_type in {"audio/wav", "audio/x-wav"} or filename.endswith(".wav"):
+        with wave.open(io.BytesIO(payload), "rb") as wav_file:
+            channels = wav_file.getnchannels()
+            sample_width = wav_file.getsampwidth()
+            sample_rate = wav_file.getframerate()
+            frames = wav_file.readframes(wav_file.getnframes())
+        if channels != 1 or sample_width != 2 or sample_rate != SAMPLE_RATE:
+            raise ValueError("audio must be 16-bit mono WAV at 16000 Hz")
+        return frames
+
+    return payload
 
 
 def transcribe_audio(audio_bytes):
@@ -123,16 +180,19 @@ def analyze_voice_note(transcript):
         f"Voice note:\n{clean}"
     )
 
-    response = client.models.generate_content(
-        model=LLM_MODEL,
-        contents=prompt,
-        config=genai.types.GenerateContentConfig(
-            system_instruction=(
-                "You extract concise summaries and possible follow-up tasks from notes. "
-                "Always return valid JSON only."
+    try:
+        response = client.models.generate_content(
+            model=LLM_MODEL,
+            contents=prompt,
+            config=genai.types.GenerateContentConfig(
+                system_instruction=(
+                    "You extract concise summaries and possible follow-up tasks from notes. "
+                    "Always return valid JSON only."
+                ),
             ),
-        ),
-    )
+        )
+    except Exception:
+        return fallback
 
     parsed = extract_json_object((response.text or "").strip())
     summary = (parsed.get("summary") or "").strip()
@@ -185,6 +245,38 @@ def build_fallback_response(transcript, created_todo):
         return f"Saved your note. Current to-dos: {preview}"
 
     return "Saved your note."
+
+
+def process_audio_note(audio_bytes, source="device"):
+    audio_path = save_pcm_wav(audio_bytes, source=source)
+
+    try:
+        transcript = transcribe_audio(audio_bytes)
+    except Exception as exc:
+        transcript = f"(transcription error: {exc})"
+
+    note_analysis = analyze_voice_note(transcript)
+    summary = note_analysis["summary"]
+    extracted_todo_title = note_analysis["todo_title"]
+
+    created_todo = maybe_create_todo(transcript)
+    if created_todo is None and extracted_todo_title:
+        created_todo = db.insert_todo(extracted_todo_title)
+
+    note = db.insert_note(
+        transcript=transcript,
+        summary=summary,
+        audio_path=audio_path,
+        source=source,
+    )
+
+    return {
+        "audio_path": audio_path,
+        "created_todo": created_todo,
+        "note": note,
+        "summary": summary,
+        "transcript": transcript,
+    }
 
 
 def generate_assistant_response(transcript, created_todo):
@@ -308,6 +400,27 @@ def create_app():
             return jsonify({"status": "error", "message": "todo not found"}), 404
         return jsonify({"status": "ok", "item": item})
 
+    @app.post("/api/todos/<int:todo_id>/edit")
+    @require_dashboard_auth
+    def edit_todo(todo_id):
+        payload = request.get_json(silent=True) or {}
+        title = (payload.get("title") or "").strip()
+        if not title:
+            return jsonify({"status": "error", "message": "title is required"}), 400
+
+        item = db.update_todo_title(todo_id, title)
+        if item is None:
+            return jsonify({"status": "error", "message": "todo not found"}), 404
+        return jsonify({"status": "ok", "item": item})
+
+    @app.post("/api/todos/<int:todo_id>/delete")
+    @require_dashboard_auth
+    def remove_todo(todo_id):
+        item = db.delete_todo(todo_id)
+        if item is None:
+            return jsonify({"status": "error", "message": "todo not found"}), 404
+        return jsonify({"status": "deleted", "item": item})
+
     @app.get("/api/notes")
     @require_dashboard_auth
     def list_notes():
@@ -339,6 +452,41 @@ def create_app():
             source=(payload.get("source") or "device").strip() or "device",
         )
         return jsonify({"status": "created", "item": item, "created_todo": created_todo}), 201
+
+    @app.post("/api/audio")
+    @require_dashboard_auth
+    def upload_audio():
+        try:
+            audio_bytes = read_uploaded_audio(request.files.get("audio"))
+        except ValueError as exc:
+            return jsonify({"status": "error", "message": str(exc)}), 400
+
+        result = process_audio_note(audio_bytes, source="dashboard-upload")
+        return (
+            jsonify(
+                {
+                    "status": "created",
+                    "item": result["note"],
+                    "created_todo": result["created_todo"],
+                }
+            ),
+            201,
+        )
+
+    @app.get("/api/notes/<int:note_id>/audio")
+    @require_dashboard_auth
+    def get_note_audio(note_id):
+        note = db.fetch_note(note_id)
+        if note is None:
+            return jsonify({"status": "error", "message": "note not found"}), 404
+        audio_path = note.get("audio_path")
+        if not audio_path:
+            return jsonify({"status": "error", "message": "note has no audio"}), 404
+
+        full_path = resolve_audio_path(audio_path)
+        if not os.path.exists(full_path):
+            return jsonify({"status": "error", "message": "audio file missing"}), 404
+        return send_file(full_path, mimetype="audio/wav", conditional=True)
 
     @app.get("/api/interactions")
     @require_dashboard_auth
@@ -394,25 +542,14 @@ def create_app():
                         continue
 
                     try:
-                        transcript = transcribe_audio(bytes(audio_buffer))
+                        processed = process_audio_note(bytes(audio_buffer), source="device")
+                        transcript = processed["transcript"]
+                        created_todo = processed["created_todo"]
                     except Exception as exc:
                         transcript = f"(transcription error: {exc})"
+                        created_todo = None
 
                     ws.send(f"T:{transcript}")
-
-                    note_analysis = analyze_voice_note(transcript)
-                    summary = note_analysis["summary"]
-                    extracted_todo_title = note_analysis["todo_title"]
-
-                    created_todo = maybe_create_todo(transcript)
-                    if created_todo is None and extracted_todo_title:
-                        created_todo = db.insert_todo(extracted_todo_title)
-
-                    db.insert_note(
-                        transcript=transcript,
-                        summary=summary,
-                        source="device",
-                    )
 
                     try:
                         assistant_response = generate_assistant_response(transcript, created_todo)
