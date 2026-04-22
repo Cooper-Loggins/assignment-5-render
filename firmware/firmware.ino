@@ -25,7 +25,8 @@
 #define SERVER_PORT 443
 #define WS_PATH "/ws/assistant"
 #define DEVICE_STATE_URL "https://sports-absently-twice.ngrok-free.dev/api/device/state"
-#define DEVICE_API_KEY "replace_me"
+// TODO before submission: replace this hard-coded test key with your final device API key.
+#define DEVICE_API_KEY "Cooperlee7"
 
 #define SAMPLE_RATE 16000
 #define MIC_BUF_LEN 256
