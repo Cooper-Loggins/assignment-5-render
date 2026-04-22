@@ -69,13 +69,76 @@ This repository contains the Assignment 5 implementation for the smart voice ass
 Install dependencies:
 
 ```bash
-pip install -r requirements.txt
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
 ```
 
 Run the Flask app:
 
 ```bash
-python app.py
+.venv/bin/python app.py
 ```
 
+The app auto-loads environment variables from `.env` if that file exists.
+
+Default local URLs:
+
+- Dashboard: `http://127.0.0.1:5001/`
+- Health check: `http://127.0.0.1:5001/healthz`
+
 The SQLite database is created automatically on startup at `DATABASE_PATH`.
+
+## Production deployment for grading
+
+This project can be deployed to Render as a public web service so it stays online
+without your laptop running.
+
+Important deployment notes:
+
+- Render web services support WebSockets, which this app needs for `WS /ws/assistant`.
+- Render expects the app to bind to `0.0.0.0` on the `PORT` environment variable.
+- SQLite requires persistent storage in production. On Render, that means attaching a
+  persistent disk and pointing `DATABASE_PATH` into that mounted directory.
+- Render persistent disks are available only on paid web services. If you stay on
+  Render free, the filesystem is ephemeral and your SQLite data will be lost on
+  restart or redeploy.
+
+This repo includes [render.yaml](/Users/cooperloggins/Desktop/assignment-5-Cooper-Loggins/render.yaml:1)
+to preconfigure the service.
+
+### Render setup
+
+1. Push this repo to GitHub.
+2. In Render, create a new Blueprint or Web Service from that repo.
+3. If using the included `render.yaml`, let Render create the `assignment-5-dashboard`
+   service.
+4. In the Render dashboard, fill in these secret environment variables:
+   - `WIT_TOKEN`
+   - `VERTEX_API_KEY`
+   - `DEVICE_API_KEY`
+   - `DASHBOARD_USERNAME`
+   - `DASHBOARD_PASSWORD`
+5. Deploy the service.
+6. Confirm the health check works at `/healthz`.
+
+The included configuration uses:
+
+- Build command: `pip install -r requirements.txt`
+- Start command: `gunicorn --bind 0.0.0.0:$PORT --threads 8 app:app`
+- Health check path: `/healthz`
+- Persistent SQLite path: `/opt/render/project/src/data/assignment5.db`
+
+### After deploy
+
+Once Render gives you a permanent hostname such as `your-service.onrender.com`:
+
+1. Update `SERVER_HOST` in `firmware/firmware.ino`
+2. Update `DEVICE_STATE_URL` in `firmware/firmware.ino`
+3. Reflash the M5 with the deployed host
+
+Use:
+
+- `https://your-service.onrender.com/api/device/state`
+- `wss://your-service.onrender.com/ws/assistant`
+
+Your M5 firmware keeps using port `443`, so only the hostname changes.

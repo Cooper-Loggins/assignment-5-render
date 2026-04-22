@@ -20,6 +20,26 @@ SYSTEM_PROMPT = (
 )
 
 
+def load_env_file(path=".env"):
+    env_path = os.path.join(os.path.dirname(__file__), path)
+    if not os.path.exists(env_path):
+        return
+
+    with open(env_path, "r", encoding="utf-8") as env_file:
+        for raw_line in env_file:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip("'").strip('"')
+            os.environ.setdefault(key, value)
+
+
+load_env_file()
+
+
 def parse_last_json(text):
     decoder = json.JSONDecoder()
     last = None
@@ -417,4 +437,6 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    port = int(os.environ.get("PORT", "5001"))
+    debug = os.environ.get("FLASK_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
+    app.run(host="0.0.0.0", port=port, debug=debug)
