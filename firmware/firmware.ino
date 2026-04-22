@@ -25,6 +25,7 @@
 #define SERVER_PORT 443
 #define WS_PATH "/ws/assistant?api_key=" DEVICE_API_KEY
 #define DEVICE_STATE_URL "https://assignment-5-dashboard.onrender.com/api/device/state"
+#define COMPLETE_TODO_URL_BASE "https://assignment-5-dashboard.onrender.com/api/device/todos/"
 // TODO before submission: replace this hard-coded test key with your final device API key.
 #define DEVICE_API_KEY "Cooperlee7"
 
@@ -44,6 +45,7 @@ enum ScreenMode { MODE_TODOS, MODE_RESPONSE };
 ScreenMode screenMode = MODE_TODOS;
 
 String todoItems[MAX_TODO_ITEMS];
+int todoIds[MAX_TODO_ITEMS];
 int todoCount = 0;
 String lastNoteSummary = "No notes yet";
 String lastTranscript = "";
@@ -52,6 +54,14 @@ String deviceMode = "todo";
 
 bool firstResponseChunk = true;
 unsigned long lastStateRefresh = 0;
+
+const int SCREEN_W = 240;
+const int SCREEN_H = 135;
+const int HEADER_H = 18;
+const int BODY_X = 6;
+const int BODY_Y = 22;
+const int BODY_W = 228;
+const int LINE_H = 11;
 
 String decodeJsonString(String value) {
   value.replace("\\n", "\n");
@@ -133,6 +143,45 @@ int extractTodoTitles(const String &json) {
   return count;
 }
 
+int extractTodoIds(const String &json) {
+  int previewStart = json.indexOf("\"todo_preview\":[");
+  if (previewStart < 0) {
+    return 0;
+  }
+
+  int previewEnd = json.indexOf("\"last_note\"", previewStart);
+  if (previewEnd < 0) {
+    previewEnd = json.length();
+  }
+
+  int count = 0;
+  int searchStart = previewStart;
+  String pattern = "\"id\":";
+
+  while (count < MAX_TODO_ITEMS) {
+    int idPos = json.indexOf(pattern, searchStart);
+    if (idPos < 0 || idPos >= previewEnd) {
+      break;
+    }
+
+    idPos += pattern.length();
+    while (idPos < previewEnd && json[idPos] == ' ') {
+      idPos++;
+    }
+
+    int endPos = idPos;
+    while (endPos < previewEnd && isDigit(json[endPos])) {
+      endPos++;
+    }
+
+    todoIds[count] = json.substring(idPos, endPos).toInt();
+    count++;
+    searchStart = endPos;
+  }
+
+  return count;
+}
+
 bool connectWiFi() {
   prefs.begin("wifi", true);
   uint8_t count = prefs.getUChar("count", 0);
@@ -173,8 +222,64 @@ bool connectWiFi() {
   return false;
 }
 
+String compactText(String text) {
+  text.replace("\n", " ");
+  text.replace("\r", " ");
+  while (text.indexOf("  ") >= 0) {
+    text.replace("  ", " ");
+  }
+  text.trim();
+  return text;
+}
+
+int drawWrappedText(const String &rawText, int x, int y, int maxWidth, int maxLines) {
+  String text = compactText(rawText);
+  if (text.isEmpty()) {
+    return y;
+  }
+
+  const int maxChars = maxWidth / 6;
+  int start = 0;
+  int line = 0;
+
+  while (start < text.length() && line < maxLines) {
+    int remaining = text.length() - start;
+    int take = remaining;
+
+    if (take > maxChars) {
+      take = maxChars;
+      int split = text.lastIndexOf(' ', start + take - 1);
+      if (split > start) {
+        take = split - start;
+      }
+    }
+
+    String part = text.substring(start, start + take);
+    part.trim();
+    start += take;
+
+    while (start < text.length() && text[start] == ' ') {
+      start++;
+    }
+
+    if (line == maxLines - 1 && start < text.length() && part.length() > 3) {
+      part = part.substring(0, part.length() - 3) + "...";
+    }
+
+    M5.Display.setCursor(x, y + (line * LINE_H));
+    M5.Display.println(part);
+    line++;
+  }
+
+  return y + (line * LINE_H);
+}
+
+void drawDivider(int y) {
+  M5.Display.drawFastHLine(BODY_X, y, BODY_W, DARKGREY);
+}
+
 void drawHeader(const char *label, uint16_t color) {
-  M5.Display.fillRect(0, 0, 240, 18, BLACK);
+  M5.Display.fillRect(0, 0, SCREEN_W, HEADER_H, BLACK);
   M5.Display.setCursor(4, 2);
   M5.Display.setTextSize(2);
   M5.Display.setTextColor(color, BLACK);
@@ -182,30 +287,44 @@ void drawHeader(const char *label, uint16_t color) {
 }
 
 void clearBody() {
-  M5.Display.fillRect(0, 20, 240, 115, BLACK);
-  M5.Display.setCursor(4, 24);
+  M5.Display.fillRect(0, 20, SCREEN_W, SCREEN_H - 20, BLACK);
+  M5.Display.setCursor(BODY_X, BODY_Y);
   M5.Display.setTextSize(1);
   M5.Display.setTextColor(WHITE, BLACK);
+  M5.Display.setTextWrap(false);
 }
 
 void renderTodoMode() {
   drawHeader("Todo Mode", GREEN);
   clearBody();
-  M5.Display.println("B: switch view");
-  M5.Display.println("A: record note");
-  M5.Display.println();
+  M5.Display.setCursor(BODY_X, BODY_Y);
+  M5.Display.println("A done   B assistant");
+  drawDivider(BODY_Y + 10);
+
+  int y = BODY_Y + 16;
+  M5.Display.setCursor(BODY_X, y);
+  M5.Display.setTextColor(YELLOW, BLACK);
+  M5.Display.println("OPEN TODOS");
+  M5.Display.setTextColor(WHITE, BLACK);
+  y += LINE_H + 1;
 
   if (todoCount == 0) {
-    M5.Display.println("No open todos");
+    y = drawWrappedText("No open todos yet.", BODY_X, y, BODY_W, 2);
   } else {
-    for (int i = 0; i < todoCount; i++) {
-      M5.Display.printf("%d. %s\n", i + 1, todoItems[i].c_str());
+    for (int i = 0; i < todoCount && y < BODY_Y + 66; i++) {
+      String item = String(i + 1) + ". " + todoItems[i];
+      y = drawWrappedText(item, BODY_X, y, BODY_W, 2) + 1;
     }
   }
 
-  M5.Display.println();
-  M5.Display.print("Last note: ");
-  M5.Display.println(lastNoteSummary);
+  drawDivider(BODY_Y + 66);
+  y = BODY_Y + 72;
+  M5.Display.setCursor(BODY_X, y);
+  M5.Display.setTextColor(CYAN, BLACK);
+  M5.Display.println("LAST NOTE");
+  M5.Display.setTextColor(WHITE, BLACK);
+  y += LINE_H + 1;
+  drawWrappedText(lastNoteSummary, BODY_X, y, BODY_W, 3);
 }
 
 void renderResponseMode() {
@@ -225,14 +344,30 @@ void renderResponseMode() {
 
   drawHeader(label, color);
   clearBody();
-  M5.Display.println("B: switch view");
-  M5.Display.println("A: record note");
-  M5.Display.println();
-  M5.Display.print("You: ");
-  M5.Display.println(lastTranscript);
-  M5.Display.println();
-  M5.Display.print("Reply: ");
-  M5.Display.println(lastResponse);
+  M5.Display.setCursor(BODY_X, BODY_Y);
+  if (assistantState == RECORDING) {
+    M5.Display.println("A stop   B todo view");
+  } else {
+    M5.Display.println("A record   B todo view");
+  }
+  drawDivider(BODY_Y + 10);
+
+  int y = BODY_Y + 16;
+  M5.Display.setCursor(BODY_X, y);
+  M5.Display.setTextColor(YELLOW, BLACK);
+  M5.Display.println("YOU SAID");
+  M5.Display.setTextColor(WHITE, BLACK);
+  y += LINE_H + 1;
+  drawWrappedText(lastTranscript.length() ? lastTranscript : "(waiting)", BODY_X, y, BODY_W, 3);
+
+  drawDivider(BODY_Y + 54);
+  y = BODY_Y + 60;
+  M5.Display.setCursor(BODY_X, y);
+  M5.Display.setTextColor(CYAN, BLACK);
+  M5.Display.println("ASSISTANT");
+  M5.Display.setTextColor(WHITE, BLACK);
+  y += LINE_H + 1;
+  drawWrappedText(lastResponse, BODY_X, y, BODY_W, 4);
 }
 
 void renderScreen() {
@@ -282,8 +417,48 @@ void fetchDeviceState() {
 
   for (int i = 0; i < MAX_TODO_ITEMS; i++) {
     todoItems[i] = "";
+    todoIds[i] = 0;
   }
+  extractTodoIds(payload);
   todoCount = extractTodoTitles(payload);
+}
+
+void completeTopTodo() {
+  if (WiFi.status() != WL_CONNECTED) {
+    lastResponse = "WiFi required";
+    renderScreen();
+    return;
+  }
+
+  if (todoCount == 0 || todoIds[0] <= 0) {
+    lastResponse = "No todo to mark done";
+    renderScreen();
+    return;
+  }
+
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  String url = String(COMPLETE_TODO_URL_BASE) + String(todoIds[0]) + "/complete";
+
+  if (!http.begin(client, url)) {
+    lastResponse = "Done request failed";
+    renderScreen();
+    return;
+  }
+
+  http.addHeader("X-Device-API-Key", DEVICE_API_KEY);
+  int code = http.POST("{}");
+  http.end();
+
+  if (code > 0 && code < 300) {
+    lastResponse = "Marked top todo done";
+    fetchDeviceState();
+  } else {
+    lastResponse = "Done request error";
+  }
+
+  renderScreen();
 }
 
 void onWebSocket(WStype_t type, uint8_t *payload, size_t length) {
@@ -377,7 +552,9 @@ void loop() {
   }
 
   if (M5.BtnA.wasPressed()) {
-    if (assistantState == READY) {
+    if (screenMode == MODE_TODOS && assistantState != RECORDING && assistantState != PROCESSING) {
+      completeTopTodo();
+    } else if (assistantState == READY) {
       assistantState = RECORDING;
       screenMode = MODE_RESPONSE;
       firstResponseChunk = true;

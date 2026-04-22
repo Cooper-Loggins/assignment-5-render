@@ -509,6 +509,16 @@ def create_app():
             }
         )
 
+    @app.post("/api/device/todos/<int:todo_id>/complete")
+    def complete_device_todo(todo_id):
+        if not device_api_key_is_valid():
+            return device_unauthorized()
+
+        item = db.mark_todo_complete(todo_id)
+        if item is None:
+            return jsonify({"status": "error", "message": "todo not found"}), 404
+        return jsonify({"status": "ok", "item": item})
+
     @sock.route("/ws/assistant")
     def assistant_socket(ws):
         if not device_api_key_is_valid():
