@@ -93,6 +93,50 @@ The SQLite database is created automatically on startup at `DATABASE_PATH`.
 This project can be deployed to Render as a public web service so it stays online
 without your laptop running.
 
+## Live deployment
+
+- Public dashboard: `https://assignment-5-dashboard.onrender.com/`
+- Health check: `https://assignment-5-dashboard.onrender.com/healthz`
+- Dashboard username: `Cooperlee7`
+- Dashboard password: `Cooperlee7`
+
+Current website features:
+
+- view saved notes and recent assistant history
+- play back saved note audio in the browser
+- add, edit, complete, and delete to-do items
+- clear saved notes and interaction history from the dashboard
+- upload WAV audio directly for transcription and note storage
+
+Current M5Stick controls:
+
+- `Todo Mode`
+- `A` short press: start recording
+- `A` long hold: switch between Todo and Assistant views
+- `B` short press: move to the next to-do item
+- `B` short hold: mark the selected to-do item done
+
+- `Assistant view`
+- `A` short press: start recording
+- `A` while recording: stop recording
+- after a response returns, the display updates with transcript and reply text
+
+Current creative extension:
+
+- the backend uses the LLM to summarize longer notes automatically
+- if a note implies a task, the backend creates a short actionable to-do automatically
+
+Suggested demo flow:
+
+1. Open the public dashboard and sign in.
+2. Confirm `/healthz` returns `{"status":"ok", ...}`.
+3. Record a voice note on the M5.
+4. Show the new note on the dashboard.
+5. Play the saved audio from the note entry.
+6. Cycle through to-dos on the M5 with `B`.
+7. Mark a selected to-do item done from the M5 with a short hold on `B`.
+8. Show the updated to-do state on the dashboard.
+
 Important deployment notes:
 
 - Render web services support WebSockets, which this app needs for `WS /ws/assistant`.
