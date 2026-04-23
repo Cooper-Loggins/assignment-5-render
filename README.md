@@ -1,19 +1,20 @@
 # ELEE 2045 Assignment 5
 
-This repository contains the Assignment 5 implementation for the smart voice assistant and cloud web dashboard project.
+**Name:** Cooper Loggins
 
-## Step-by-step build plan
+This project is a smart voice assistant built around an M5StickC Plus 2 and a
+publicly deployed Flask dashboard. The device records voice notes, streams audio
+to the cloud backend, receives compact to-do state from the server, and lets the
+user review or complete tasks directly from the wearable screen. The web app
+stores notes, audio, to-dos, and interaction history in SQLite, then presents them
+through a styled dashboard that supports playback, manual editing, cleanup, and
+device sync.
 
-1. Scaffold the Assignment 5 project structure and backend route layout.
-2. Add the SQLite schema and persistence layer for notes, todos, and interaction history.
-3. Implement the Flask API routes and WebSocket assistant workflow against the database.
-4. Build the dashboard UI for notes, todos, and device state.
-5. Connect the M5Stick firmware to the finalized backend workflow.
-6. Add authentication for the dashboard and device API access.
-7. Implement the creative extension.
-8. Finalize deployment and submission materials.
+**Video Demo:** Add your final YouTube link here.
 
-## Planned backend surface
+## Project overview
+
+Main implementation areas:
 
 - `GET /` dashboard
 - `GET /healthz` health check
@@ -168,7 +169,7 @@ to preconfigure the service.
 The included configuration uses:
 
 - Build command: `pip install -r requirements.txt`
-- Start command: `gunicorn --bind 0.0.0.0:$PORT --threads 8 app:app`
+- Start command: `gunicorn --bind 0.0.0.0:$PORT --worker-class gthread --workers 1 --threads 100 app:app`
 - Health check path: `/healthz`
 - Persistent SQLite path: `/opt/render/project/src/data/assignment5.db`
 
