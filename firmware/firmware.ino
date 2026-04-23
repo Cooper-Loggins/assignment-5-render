@@ -33,6 +33,8 @@
 #define MIC_BUF_LEN 256
 #define STATE_REFRESH_MS 60000
 #define MAX_TODO_ITEMS 5
+#define NOISE_GATE_LEVEL 180
+#define MAX_SILENCE_FRAMES 6
 
 WebSocketsClient ws;
 Preferences prefs;
@@ -57,6 +59,9 @@ bool firstResponseChunk = true;
 unsigned long lastStateRefresh = 0;
 bool btnBHoldHandled = false;
 bool btnAHoldHandled = false;
+float dcEstimate = 0.0f;
+float smoothSample = 0.0f;
+int silentFrameCount = 0;
 
 const int SCREEN_W = 240;
 const int SCREEN_H = 135;
@@ -448,6 +453,38 @@ void selectNextTodo() {
   renderScreen();
 }
 
+void processMicBuffer(int16_t *buffer, size_t sampleCount) {
+  long absSum = 0;
+
+  for (size_t i = 0; i < sampleCount; i++) {
+    float raw = static_cast<float>(buffer[i]);
+
+    // Track and remove slowly changing DC bias from the MEMS mic.
+    dcEstimate = (dcEstimate * 0.995f) + (raw * 0.005f);
+    float centered = raw - dcEstimate;
+
+    // Light smoothing reduces sharp hiss without crushing speech.
+    smoothSample = (smoothSample * 0.35f) + (centered * 0.65f);
+
+    int16_t cleaned = static_cast<int16_t>(constrain(smoothSample, -32768.0f, 32767.0f));
+    buffer[i] = cleaned;
+    absSum += abs(cleaned);
+  }
+
+  int averageLevel = static_cast<int>(absSum / sampleCount);
+  if (averageLevel < NOISE_GATE_LEVEL) {
+    silentFrameCount++;
+  } else {
+    silentFrameCount = 0;
+  }
+
+  if (silentFrameCount >= MAX_SILENCE_FRAMES) {
+    for (size_t i = 0; i < sampleCount; i++) {
+      buffer[i] = 0;
+    }
+  }
+}
+
 void completeSelectedTodo() {
   if (WiFi.status() != WL_CONNECTED) {
     lastResponse = "WiFi required";
@@ -621,6 +658,9 @@ void loop() {
       firstResponseChunk = true;
       lastTranscript = "";
       lastResponse = "Listening...";
+      dcEstimate = 0.0f;
+      smoothSample = 0.0f;
+      silentFrameCount = 0;
       ws.sendTXT("start");
       renderScreen();
     } else if (assistantState == RECORDING) {
@@ -633,6 +673,7 @@ void loop() {
   if (assistantState == RECORDING) {
     int16_t buffer[MIC_BUF_LEN];
     if (M5.Mic.record(buffer, MIC_BUF_LEN, SAMPLE_RATE)) {
+      processMicBuffer(buffer, MIC_BUF_LEN);
       ws.sendBIN((uint8_t *)buffer, sizeof(buffer));
     }
   }
