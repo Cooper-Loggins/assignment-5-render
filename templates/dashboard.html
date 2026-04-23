@@ -730,6 +730,7 @@
                     <div class="toolbar">
                         <span class="mini">Most recent first</span>
                         <div class="toolbar-actions">
+                            <button class="ghost" type="button" id="notes-toggle" hidden>Show More</button>
                             <button class="danger" type="button" id="clear-notes">Clear Notes</button>
                             <button class="ghost" type="button" id="refresh-notes">Refresh Notes</button>
                         </div>
@@ -747,6 +748,7 @@
                         <div class="toolbar">
                             <span class="mini">Latest sessions</span>
                             <div class="toolbar-actions">
+                                <button class="ghost" type="button" id="interactions-toggle" hidden>Show More</button>
                                 <button class="danger" type="button" id="clear-interactions">Clear History</button>
                                 <button class="ghost" type="button" id="refresh-all">Refresh All</button>
                             </div>
@@ -765,6 +767,8 @@
             interactions: [],
             device: null,
             health: null,
+            notesExpanded: false,
+            interactionsExpanded: false,
         };
 
         function escapeHtml(value) {
@@ -916,10 +920,18 @@
             const root = document.getElementById("note-list");
             if (!state.notes.length) {
                 root.innerHTML = '<div class="empty">No notes saved yet.</div>';
+                document.getElementById("notes-toggle").hidden = true;
                 return;
             }
 
-            root.innerHTML = state.notes.map((item) => `
+            document.getElementById("notes-toggle").hidden = state.notes.length <= 5;
+            document.getElementById("notes-toggle").textContent = state.notesExpanded
+                ? "Show Fewer"
+                : `Show More (${state.notes.length - 5})`;
+
+            const visibleNotes = state.notesExpanded ? state.notes : state.notes.slice(0, 5);
+
+            root.innerHTML = visibleNotes.map((item) => `
                 <article class="item note-item">
                     <div class="item-top">
                         <div class="pill ok">${escapeHtml(item.source || "device")}</div>
@@ -964,10 +976,20 @@
             const root = document.getElementById("interaction-list");
             if (!state.interactions.length) {
                 root.innerHTML = '<div class="empty">No interactions logged yet.</div>';
+                document.getElementById("interactions-toggle").hidden = true;
                 return;
             }
 
-            root.innerHTML = state.interactions.map((item) => `
+            document.getElementById("interactions-toggle").hidden = state.interactions.length <= 5;
+            document.getElementById("interactions-toggle").textContent = state.interactionsExpanded
+                ? "Show Fewer"
+                : `Show More (${state.interactions.length - 5})`;
+
+            const visibleInteractions = state.interactionsExpanded
+                ? state.interactions
+                : state.interactions.slice(0, 5);
+
+            root.innerHTML = visibleInteractions.map((item) => `
                 <article class="item interaction-item">
                     <div class="item-top">
                         <span class="pill ${item.status === "completed" ? "ok" : ""}">${escapeHtml(item.status)}</span>
@@ -1120,6 +1142,14 @@
 
         document.getElementById("refresh-all").addEventListener("click", refreshAll);
         document.getElementById("refresh-notes").addEventListener("click", refreshAll);
+        document.getElementById("notes-toggle").addEventListener("click", () => {
+            state.notesExpanded = !state.notesExpanded;
+            renderNotes();
+        });
+        document.getElementById("interactions-toggle").addEventListener("click", () => {
+            state.interactionsExpanded = !state.interactionsExpanded;
+            renderInteractions();
+        });
         document.getElementById("clear-notes").addEventListener("click", async () => {
             if (!window.confirm("Clear all notes and saved audio files?")) return;
             try {
