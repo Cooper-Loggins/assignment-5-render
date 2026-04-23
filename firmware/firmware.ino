@@ -33,8 +33,6 @@
 #define MIC_BUF_LEN 256
 #define STATE_REFRESH_MS 60000
 #define MAX_TODO_ITEMS 5
-#define NOISE_FLOOR_LEVEL 120
-#define SPEECH_GAIN 1.10f
 
 WebSocketsClient ws;
 Preferences prefs;
@@ -69,6 +67,7 @@ const int BODY_Y = 22;
 const int BODY_W = 228;
 const int LINE_H = 11;
 const int TODO_SECTION_BOTTOM = BODY_Y + 64;
+const int TODO_VISIBLE_ITEMS = 2;
 
 String decodeJsonString(String value) {
   value.replace("\\n", "\n");
@@ -239,8 +238,21 @@ String compactText(String text) {
   return text;
 }
 
+String sanitizeDisplayText(String text) {
+  String clean = "";
+  for (int i = 0; i < text.length(); i++) {
+    unsigned char c = static_cast<unsigned char>(text[i]);
+    if (c >= 32 && c <= 126) {
+      clean += static_cast<char>(c);
+    } else if (c == '\n' || c == '\r' || c == '\t') {
+      clean += ' ';
+    }
+  }
+  return compactText(clean);
+}
+
 int drawWrappedText(const String &rawText, int x, int y, int maxWidth, int maxLines) {
-  String text = compactText(rawText);
+  String text = sanitizeDisplayText(rawText);
   if (text.isEmpty()) {
     return y;
   }
@@ -322,7 +334,18 @@ void renderTodoMode() {
     if (selectedTodoIndex >= todoCount) {
       selectedTodoIndex = 0;
     }
-    for (int i = 0; i < todoCount; i++) {
+
+    int startIndex = selectedTodoIndex;
+    if (todoCount > TODO_VISIBLE_ITEMS) {
+      if (startIndex > todoCount - TODO_VISIBLE_ITEMS) {
+        startIndex = todoCount - TODO_VISIBLE_ITEMS;
+      }
+    } else {
+      startIndex = 0;
+    }
+
+    int shownCount = 0;
+    for (int i = startIndex; i < todoCount && shownCount < TODO_VISIBLE_ITEMS; i++) {
       String prefix = (i == selectedTodoIndex) ? "> " : "  ";
       String item = prefix + String(i + 1) + ". " + todoItems[i];
       int linesNeeded = 1;
@@ -338,6 +361,18 @@ void renderTodoMode() {
         break;
       }
       y = drawWrappedText(item, BODY_X, y, BODY_W, 2) + 1;
+      shownCount++;
+    }
+
+    if (todoCount > TODO_VISIBLE_ITEMS) {
+      M5.Display.setCursor(BODY_X, TODO_SECTION_BOTTOM - LINE_H);
+      M5.Display.setTextColor(ORANGE, BLACK);
+      if (selectedTodoIndex < todoCount - 1) {
+        M5.Display.println("keep scrolling");
+      } else {
+        M5.Display.println("end of list");
+      }
+      M5.Display.setTextColor(WHITE, BLACK);
     }
   }
 
@@ -471,19 +506,6 @@ void processMicBuffer(int16_t *buffer, size_t sampleCount) {
     // Track and remove slowly changing DC bias from the MEMS mic.
     dcEstimate = (dcEstimate * 0.995f) + (raw * 0.005f);
     float centered = raw - dcEstimate;
-
-    float magnitude = fabs(centered);
-    if (magnitude < NOISE_FLOOR_LEVEL) {
-      centered = 0.0f;
-    } else {
-      // Remove a small noise floor without chopping the speech waveform.
-      if (centered > 0) {
-        centered -= NOISE_FLOOR_LEVEL;
-      } else {
-        centered += NOISE_FLOOR_LEVEL;
-      }
-      centered *= SPEECH_GAIN;
-    }
 
     buffer[i] = static_cast<int16_t>(constrain(centered, -32768.0f, 32767.0f));
   }
