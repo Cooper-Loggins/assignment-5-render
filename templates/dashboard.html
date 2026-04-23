@@ -190,6 +190,45 @@
                 linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 250, 244, 0.92));
         }
 
+        .profile-card {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid var(--line);
+            box-shadow: var(--shadow-soft);
+        }
+
+        .profile-photo {
+            width: 68px;
+            height: 68px;
+            border-radius: 18px;
+            object-fit: cover;
+            border: 2px solid rgba(180, 90, 43, 0.18);
+            box-shadow: 0 10px 24px rgba(63, 45, 22, 0.12);
+        }
+
+        .profile-copy {
+            display: grid;
+            gap: 4px;
+        }
+
+        .profile-name {
+            font-family: "Avenir Next", "Segoe UI", sans-serif;
+            font-size: 0.82rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--muted);
+            font-weight: 700;
+        }
+
+        .profile-role {
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
         .status-chip {
             display: inline-flex;
             align-items: center;
@@ -604,6 +643,13 @@
                 </article>
 
                 <aside class="panel hero-status">
+                    <div class="profile-card">
+                        <img class="profile-photo" src="{{ url_for('static', filename='images/headshot.jpg') }}" alt="Project author headshot">
+                        <div class="profile-copy">
+                            <div class="profile-name">Cooper Loggins</div>
+                            <div class="profile-role">Assignment 5 Project Dashboard</div>
+                        </div>
+                    </div>
                     <div class="status-chip">
                         <span class="status-dot"></span>
                         <span id="health-status">Loading backend status</span>
