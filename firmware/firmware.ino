@@ -31,7 +31,7 @@
 
 #define SAMPLE_RATE 16000
 #define MIC_BUF_LEN 256
-#define STATE_REFRESH_MS 15000
+#define STATE_REFRESH_MS 60000
 #define MAX_TODO_ITEMS 5
 
 WebSocketsClient ws;
@@ -47,6 +47,7 @@ ScreenMode screenMode = MODE_TODOS;
 String todoItems[MAX_TODO_ITEMS];
 int todoIds[MAX_TODO_ITEMS];
 int todoCount = 0;
+int selectedTodoIndex = 0;
 String lastNoteSummary = "No notes yet";
 String lastTranscript = "";
 String lastResponse = "Press A to record";
@@ -54,6 +55,8 @@ String deviceMode = "todo";
 
 bool firstResponseChunk = true;
 unsigned long lastStateRefresh = 0;
+bool btnBHoldHandled = false;
+bool btnAHoldHandled = false;
 
 const int SCREEN_W = 240;
 const int SCREEN_H = 135;
@@ -298,7 +301,7 @@ void renderTodoMode() {
   drawHeader("Todo Mode", GREEN);
   clearBody();
   M5.Display.setCursor(BODY_X, BODY_Y);
-  M5.Display.println("A done   B assistant");
+  M5.Display.println("A rec  hold A asst");
   drawDivider(BODY_Y + 10);
 
   int y = BODY_Y + 16;
@@ -309,10 +312,15 @@ void renderTodoMode() {
   y += LINE_H + 1;
 
   if (todoCount == 0) {
+    selectedTodoIndex = 0;
     y = drawWrappedText("No open todos yet.", BODY_X, y, BODY_W, 2);
   } else {
+    if (selectedTodoIndex >= todoCount) {
+      selectedTodoIndex = 0;
+    }
     for (int i = 0; i < todoCount && y < BODY_Y + 66; i++) {
-      String item = String(i + 1) + ". " + todoItems[i];
+      String prefix = (i == selectedTodoIndex) ? "> " : "  ";
+      String item = prefix + String(i + 1) + ". " + todoItems[i];
       y = drawWrappedText(item, BODY_X, y, BODY_W, 2) + 1;
     }
   }
@@ -321,10 +329,14 @@ void renderTodoMode() {
   y = BODY_Y + 72;
   M5.Display.setCursor(BODY_X, y);
   M5.Display.setTextColor(CYAN, BLACK);
-  M5.Display.println("LAST NOTE");
+  M5.Display.println("HOLD B TO MARK DONE");
   M5.Display.setTextColor(WHITE, BLACK);
   y += LINE_H + 1;
-  drawWrappedText(lastNoteSummary, BODY_X, y, BODY_W, 3);
+  if (todoCount == 0) {
+    drawWrappedText(lastNoteSummary, BODY_X, y, BODY_W, 3);
+  } else {
+    drawWrappedText("Short B selects next task.", BODY_X, y, BODY_W, 3);
+  }
 }
 
 void renderResponseMode() {
@@ -348,7 +360,7 @@ void renderResponseMode() {
   if (assistantState == RECORDING) {
     M5.Display.println("A stop   B todo view");
   } else {
-    M5.Display.println("A record   B todo view");
+    M5.Display.println("A rec  hold A todo");
   }
   drawDivider(BODY_Y + 10);
 
@@ -421,16 +433,29 @@ void fetchDeviceState() {
   }
   extractTodoIds(payload);
   todoCount = extractTodoTitles(payload);
+  if (todoCount == 0) {
+    selectedTodoIndex = 0;
+  } else if (selectedTodoIndex >= todoCount) {
+    selectedTodoIndex = 0;
+  }
 }
 
-void completeTopTodo() {
+void selectNextTodo() {
+  if (todoCount <= 1) {
+    return;
+  }
+  selectedTodoIndex = (selectedTodoIndex + 1) % todoCount;
+  renderScreen();
+}
+
+void completeSelectedTodo() {
   if (WiFi.status() != WL_CONNECTED) {
     lastResponse = "WiFi required";
     renderScreen();
     return;
   }
 
-  if (todoCount == 0 || todoIds[0] <= 0) {
+  if (todoCount == 0 || selectedTodoIndex >= todoCount || todoIds[selectedTodoIndex] <= 0) {
     lastResponse = "No todo to mark done";
     renderScreen();
     return;
@@ -439,7 +464,8 @@ void completeTopTodo() {
   WiFiClientSecure client;
   client.setInsecure();
   HTTPClient http;
-  String url = String(COMPLETE_TODO_URL_BASE) + String(todoIds[0]) + "/complete";
+  String completedTitle = todoItems[selectedTodoIndex];
+  String url = String(COMPLETE_TODO_URL_BASE) + String(todoIds[selectedTodoIndex]) + "/complete";
 
   if (!http.begin(client, url)) {
     lastResponse = "Done request failed";
@@ -452,8 +478,9 @@ void completeTopTodo() {
   http.end();
 
   if (code > 0 && code < 300) {
-    lastResponse = "Marked top todo done";
+    lastResponse = "Done: " + completedTitle;
     fetchDeviceState();
+    screenMode = MODE_TODOS;
   } else {
     lastResponse = "Done request error";
   }
@@ -546,15 +573,49 @@ void loop() {
     renderScreen();
   }
 
-  if (M5.BtnB.wasPressed()) {
+  if (
+    assistantState != RECORDING &&
+    assistantState != PROCESSING &&
+    M5.BtnA.pressedFor(700) &&
+    !btnAHoldHandled
+  ) {
     screenMode = (screenMode == MODE_TODOS) ? MODE_RESPONSE : MODE_TODOS;
+    btnAHoldHandled = true;
     renderScreen();
   }
 
+  if (
+    screenMode == MODE_TODOS &&
+    assistantState != RECORDING &&
+    assistantState != PROCESSING &&
+    M5.BtnB.pressedFor(500) &&
+    !btnBHoldHandled
+  ) {
+    completeSelectedTodo();
+    btnBHoldHandled = true;
+  }
+
+  if (M5.BtnB.wasReleased()) {
+    if (
+      screenMode == MODE_TODOS &&
+      assistantState != RECORDING &&
+      assistantState != PROCESSING &&
+      !btnBHoldHandled
+    ) {
+      selectNextTodo();
+    } else {
+      renderScreen();
+    }
+    btnBHoldHandled = false;
+  }
+
   if (M5.BtnA.wasPressed()) {
-    if (screenMode == MODE_TODOS && assistantState != RECORDING && assistantState != PROCESSING) {
-      completeTopTodo();
-    } else if (assistantState == READY) {
+  }
+
+  if (M5.BtnA.wasReleased()) {
+    if (btnAHoldHandled) {
+      btnAHoldHandled = false;
+    } else if (assistantState == READY || assistantState == DISCONNECTED) {
       assistantState = RECORDING;
       screenMode = MODE_RESPONSE;
       firstResponseChunk = true;

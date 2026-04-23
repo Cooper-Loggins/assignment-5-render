@@ -62,7 +62,9 @@ def parse_last_json(text):
 
 
 def ensure_audio_dir():
-    media_root = os.path.join(os.path.dirname(__file__), "media", AUDIO_SUBDIR)
+    db_path = os.environ.get("DATABASE_PATH", "assignment5.db")
+    db_dir = os.path.dirname(os.path.abspath(db_path))
+    media_root = os.path.join(db_dir, "media", AUDIO_SUBDIR)
     os.makedirs(media_root, exist_ok=True)
     return media_root
 
@@ -87,7 +89,7 @@ def save_pcm_wav(audio_bytes, source="device"):
 
 
 def resolve_audio_path(relative_path):
-    return os.path.join(os.path.dirname(__file__), "media", relative_path)
+    return os.path.join(os.path.dirname(ensure_audio_dir()), relative_path)
 
 
 def remove_audio_file(relative_path):
