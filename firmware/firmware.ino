@@ -33,8 +33,8 @@
 #define MIC_BUF_LEN 256
 #define STATE_REFRESH_MS 60000
 #define MAX_TODO_ITEMS 5
-#define NOISE_GATE_LEVEL 180
-#define MAX_SILENCE_FRAMES 6
+#define NOISE_FLOOR_LEVEL 120
+#define SPEECH_GAIN 1.10f
 
 WebSocketsClient ws;
 Preferences prefs;
@@ -60,8 +60,6 @@ unsigned long lastStateRefresh = 0;
 bool btnBHoldHandled = false;
 bool btnAHoldHandled = false;
 float dcEstimate = 0.0f;
-float smoothSample = 0.0f;
-int silentFrameCount = 0;
 
 const int SCREEN_W = 240;
 const int SCREEN_H = 135;
@@ -70,6 +68,7 @@ const int BODY_X = 6;
 const int BODY_Y = 22;
 const int BODY_W = 228;
 const int LINE_H = 11;
+const int TODO_SECTION_BOTTOM = BODY_Y + 64;
 
 String decodeJsonString(String value) {
   value.replace("\\n", "\n");
@@ -323,9 +322,21 @@ void renderTodoMode() {
     if (selectedTodoIndex >= todoCount) {
       selectedTodoIndex = 0;
     }
-    for (int i = 0; i < todoCount && y < BODY_Y + 66; i++) {
+    for (int i = 0; i < todoCount; i++) {
       String prefix = (i == selectedTodoIndex) ? "> " : "  ";
       String item = prefix + String(i + 1) + ". " + todoItems[i];
+      int linesNeeded = 1;
+      if (item.length() > (BODY_W / 6)) {
+        linesNeeded = 2;
+      }
+      int nextY = y + (linesNeeded * LINE_H) + 1;
+      if (nextY > TODO_SECTION_BOTTOM) {
+        M5.Display.setCursor(BODY_X, TODO_SECTION_BOTTOM - LINE_H);
+        M5.Display.setTextColor(ORANGE, BLACK);
+        M5.Display.println("...more items below");
+        M5.Display.setTextColor(WHITE, BLACK);
+        break;
+      }
       y = drawWrappedText(item, BODY_X, y, BODY_W, 2) + 1;
     }
   }
@@ -454,8 +465,6 @@ void selectNextTodo() {
 }
 
 void processMicBuffer(int16_t *buffer, size_t sampleCount) {
-  long absSum = 0;
-
   for (size_t i = 0; i < sampleCount; i++) {
     float raw = static_cast<float>(buffer[i]);
 
@@ -463,25 +472,20 @@ void processMicBuffer(int16_t *buffer, size_t sampleCount) {
     dcEstimate = (dcEstimate * 0.995f) + (raw * 0.005f);
     float centered = raw - dcEstimate;
 
-    // Light smoothing reduces sharp hiss without crushing speech.
-    smoothSample = (smoothSample * 0.35f) + (centered * 0.65f);
-
-    int16_t cleaned = static_cast<int16_t>(constrain(smoothSample, -32768.0f, 32767.0f));
-    buffer[i] = cleaned;
-    absSum += abs(cleaned);
-  }
-
-  int averageLevel = static_cast<int>(absSum / sampleCount);
-  if (averageLevel < NOISE_GATE_LEVEL) {
-    silentFrameCount++;
-  } else {
-    silentFrameCount = 0;
-  }
-
-  if (silentFrameCount >= MAX_SILENCE_FRAMES) {
-    for (size_t i = 0; i < sampleCount; i++) {
-      buffer[i] = 0;
+    float magnitude = fabs(centered);
+    if (magnitude < NOISE_FLOOR_LEVEL) {
+      centered = 0.0f;
+    } else {
+      // Remove a small noise floor without chopping the speech waveform.
+      if (centered > 0) {
+        centered -= NOISE_FLOOR_LEVEL;
+      } else {
+        centered += NOISE_FLOOR_LEVEL;
+      }
+      centered *= SPEECH_GAIN;
     }
+
+    buffer[i] = static_cast<int16_t>(constrain(centered, -32768.0f, 32767.0f));
   }
 }
 
@@ -659,8 +663,6 @@ void loop() {
       lastTranscript = "";
       lastResponse = "Listening...";
       dcEstimate = 0.0f;
-      smoothSample = 0.0f;
-      silentFrameCount = 0;
       ws.sendTXT("start");
       renderScreen();
     } else if (assistantState == RECORDING) {
