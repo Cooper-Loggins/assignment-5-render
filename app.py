@@ -189,6 +189,7 @@ def analyze_voice_note(transcript):
         '"summary" must be a concise dashboard-ready summary under 90 characters. '
         '"todo_titles" must be an array of zero or more short actionable todo titles under 70 characters each. '
         "Extract every distinct actionable task the user says, even if phrased naturally instead of using the word todo. "
+        "Be exhaustive: if the user lists three or four tasks, include all of them. "
         "Split combined spoken lists into separate task titles. "
         "Do not return meta phrases like 'things to do today' or time words by themselves. "
         "Do not create todos for pure questions, brainstorming, general information, requests for explanation, or test prompts.\n\n"
@@ -203,6 +204,7 @@ def analyze_voice_note(transcript):
                 system_instruction=(
                     "You extract concise summaries and all distinct actionable tasks from notes. "
                     "When the user mentions multiple tasks, return one short task title per task. "
+                    "Do not omit later items from a list. "
                     "Always return valid JSON only."
                 ),
             ),
@@ -848,11 +850,13 @@ def build_todo_titles_from_note(transcript, note_analysis):
         transcript,
         note_analysis.get("todo_titles") or [note_analysis.get("todo_title")],
     )
-    if llm_todo_titles:
-        return llm_todo_titles
+    explicit_todo_titles = extract_explicit_todo_titles(transcript)
+    merged_todo_titles = merge_todo_titles(llm_todo_titles, explicit_todo_titles)
+    if merged_todo_titles:
+        return merged_todo_titles
 
     # Fallback only when the LLM is unavailable or returns nothing useful.
-    return extract_explicit_todo_titles(transcript)
+    return []
 
 
 def build_fallback_response(transcript, created_todos):
