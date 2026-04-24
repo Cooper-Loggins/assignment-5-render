@@ -186,7 +186,9 @@ def analyze_voice_note(transcript):
         '"summary" and "todo_title". '
         '"summary" must be a concise dashboard-ready summary under 90 characters. '
         '"todo_title" must be either a short actionable todo title under 70 characters '
-        'or null if the note does not clearly imply a task.\n\n'
+        "or null if the note does not clearly imply a task. "
+        "Only return a todo_title for explicit user commitments, reminders, or clearly intended follow-up actions. "
+        "Do not create todos for questions, brainstorming, general information, requests for explanation, or test prompts.\n\n"
         f"Voice note:\n{clean}"
     )
 
@@ -248,6 +250,21 @@ def maybe_create_todo(transcript):
 def should_ignore_extracted_todo(transcript):
     lowered = " ".join(transcript.lower().strip().split())
     ignored_prefixes = [
+        "can you ",
+        "could you ",
+        "would you ",
+        "will you ",
+        "what ",
+        "when ",
+        "where ",
+        "why ",
+        "who ",
+        "how ",
+        "is ",
+        "are ",
+        "do ",
+        "does ",
+        "did ",
         "give me ",
         "tell me ",
         "show me ",
@@ -267,9 +284,72 @@ def should_ignore_extracted_todo(transcript):
         "sample text",
         "long list of text",
     ]
+    explicit_todo_signals = [
+        "todo ",
+        "todo:",
+        "to do ",
+        "to do:",
+        "to-do ",
+        "to-do:",
+        "remember to ",
+        "remind me to ",
+        "i need to ",
+        "i should ",
+        "i have to ",
+        "don't let me forget to ",
+        "do not let me forget to ",
+    ]
+    if lowered.startswith(tuple(explicit_todo_signals)):
+        return False
+    if transcript.strip().endswith("?"):
+        return True
     return lowered.startswith(tuple(ignored_prefixes)) or any(
         phrase in lowered for phrase in ignored_phrases
     )
+
+
+def should_accept_extracted_todo(transcript, todo_title):
+    if not todo_title:
+        return False
+
+    lowered = " ".join(transcript.lower().strip().split())
+    explicit_todo_signals = [
+        "todo ",
+        "todo:",
+        "to do ",
+        "to do:",
+        "to-do ",
+        "to-do:",
+        "add todo ",
+        "add a todo ",
+        "add to do ",
+        "add a to do ",
+        "remember to ",
+        "remind me to ",
+        "i need to ",
+        "i should ",
+        "i have to ",
+        "don't let me forget to ",
+        "do not let me forget to ",
+    ]
+
+    if lowered.startswith(tuple(explicit_todo_signals)):
+        return True
+    if should_ignore_extracted_todo(transcript):
+        return False
+
+    commitment_markers = [
+        "i need to ",
+        "i should ",
+        "i have to ",
+        "i must ",
+        "need to ",
+        "have to ",
+        "must ",
+        "remember to ",
+        "remind me to ",
+    ]
+    return any(marker in lowered for marker in commitment_markers)
 
 
 def build_fallback_response(transcript, created_todo):
@@ -295,7 +375,7 @@ def process_audio_note(audio_bytes, source="device"):
     note_analysis = analyze_voice_note(transcript)
     summary = note_analysis["summary"]
     extracted_todo_title = note_analysis["todo_title"]
-    if extracted_todo_title and should_ignore_extracted_todo(transcript):
+    if not should_accept_extracted_todo(transcript, extracted_todo_title):
         extracted_todo_title = None
 
     created_todo = maybe_create_todo(transcript)
@@ -460,6 +540,12 @@ def create_app():
             return jsonify({"status": "error", "message": "todo not found"}), 404
         return jsonify({"status": "deleted", "item": item})
 
+    @app.post("/api/todos/clear")
+    @require_dashboard_auth
+    def clear_todos():
+        db.clear_todos()
+        return jsonify({"status": "cleared"})
+
     @app.get("/api/notes")
     @require_dashboard_auth
     def list_notes():
@@ -481,7 +567,7 @@ def create_app():
         note_analysis = analyze_voice_note(transcript)
         summary = (payload.get("summary") or "").strip() or note_analysis["summary"]
         created_todo = None
-        if note_analysis["todo_title"]:
+        if should_accept_extracted_todo(transcript, note_analysis["todo_title"]):
             created_todo = db.insert_todo(note_analysis["todo_title"])
 
         item = db.insert_note(

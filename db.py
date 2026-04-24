@@ -150,6 +150,12 @@ def delete_todo(todo_id):
     return existing
 
 
+def clear_todos():
+    db = get_db()
+    db.execute("DELETE FROM todos")
+    db.commit()
+
+
 def fetch_notes(limit=None):
     db = get_db()
     query = """

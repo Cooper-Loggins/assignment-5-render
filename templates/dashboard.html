@@ -691,6 +691,12 @@
                             </form>
                         </div>
                         <div class="flash" id="todo-flash"></div>
+                        <div class="toolbar">
+                            <span class="mini">Open and completed items</span>
+                            <div class="toolbar-actions">
+                                <button class="danger" type="button" id="clear-todos">Clear To-Dos</button>
+                            </div>
+                        </div>
                         <div class="list" id="todo-list"></div>
                     </article>
 
@@ -1115,6 +1121,17 @@
                 await apiPost("/api/todos", { title });
                 document.getElementById("todo-title").value = "";
                 setFlash("todo-flash", "To-do created.", "success");
+                await refreshAll();
+            } catch (error) {
+                setFlash("todo-flash", error.message, "error");
+            }
+        });
+
+        document.getElementById("clear-todos").addEventListener("click", async () => {
+            if (!window.confirm("Clear all to-do items, including completed ones?")) return;
+            try {
+                await apiPost("/api/todos/clear", {});
+                setFlash("todo-flash", "To-dos cleared.", "success");
                 await refreshAll();
             } catch (error) {
                 setFlash("todo-flash", error.message, "error");

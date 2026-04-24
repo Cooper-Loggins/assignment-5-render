@@ -34,6 +34,7 @@
 #define STATE_REFRESH_MS 60000
 #define MAX_TODO_ITEMS 5
 #define MAX_WRAP_LINES 24
+#define STOP_TAIL_MS 900
 
 WebSocketsClient ws;
 Preferences prefs;
@@ -61,11 +62,13 @@ bool firstResponseChunk = true;
 unsigned long lastStateRefresh = 0;
 bool btnBHoldHandled = false;
 bool btnAHoldHandled = false;
-float dcEstimate = 0.0f;
+bool stopRequested = false;
+unsigned long stopRequestedAt = 0;
 unsigned long tempStatusUntil = 0;
 uint16_t tempStatusColor = WHITE;
 int transcriptScrollOffset = 0;
 int responseScrollOffset = 0;
+float micDcEstimate = 0.0f;
 
 const int SCREEN_W = 240;
 const int SCREEN_H = 135;
@@ -75,7 +78,6 @@ const int BODY_Y = 22;
 const int BODY_W = 228;
 const int LINE_H = 11;
 const int TODO_SECTION_BOTTOM = BODY_Y + 64;
-const int TODO_VISIBLE_ITEMS = 2;
 const int RESPONSE_TRANSCRIPT_VISIBLE_LINES = 2;
 const int RESPONSE_ASSISTANT_VISIBLE_LINES = 3;
 
@@ -416,47 +418,32 @@ void renderTodoMode() {
     if (selectedTodoIndex >= todoCount) {
       selectedTodoIndex = 0;
     }
-    const int todoHintY = TODO_SECTION_BOTTOM - LINE_H;
+    const int todoHintY = TODO_SECTION_BOTTOM - LINE_H + 2;
+    const int todoTextBottom = todoHintY - 3;
+    const int visibleTodoLines = max(1, (todoTextBottom - y) / LINE_H);
+    String item = "> " + String(selectedTodoIndex + 1) + "/" + String(todoCount) + "  " +
+                  todoItems[selectedTodoIndex];
+    int todoLineCount = drawWrappedTextWindow(
+      item,
+      transcriptDisplayLines,
+      BODY_X,
+      y,
+      BODY_W,
+      0,
+      visibleTodoLines
+    );
 
-    int startIndex = selectedTodoIndex;
-    if (todoCount > TODO_VISIBLE_ITEMS) {
-      if (startIndex > todoCount - TODO_VISIBLE_ITEMS) {
-        startIndex = todoCount - TODO_VISIBLE_ITEMS;
-      }
+    M5.Display.fillRect(0, todoHintY - 1, SCREEN_W, LINE_H + 3, BLACK);
+    M5.Display.setCursor(BODY_X, todoHintY);
+    M5.Display.setTextColor(ORANGE, BLACK);
+    if (todoLineCount > visibleTodoLines) {
+      M5.Display.println("todo continues, press B");
+    } else if (todoCount > 1) {
+      M5.Display.println("keep scrolling");
     } else {
-      startIndex = 0;
+      M5.Display.println("only todo item");
     }
-
-    int shownCount = 0;
-    for (int i = startIndex; i < todoCount && shownCount < TODO_VISIBLE_ITEMS; i++) {
-      String prefix = (i == selectedTodoIndex) ? "> " : "  ";
-      String item = prefix + String(i + 1) + ". " + todoItems[i];
-      int linesNeeded = 1;
-      if (item.length() > (BODY_W / 6)) {
-        linesNeeded = 2;
-      }
-      int nextY = y + (linesNeeded * LINE_H) + 1;
-      if (nextY > todoHintY) {
-        M5.Display.setCursor(BODY_X, todoHintY);
-        M5.Display.setTextColor(ORANGE, BLACK);
-        M5.Display.println("...more items below");
-        M5.Display.setTextColor(WHITE, BLACK);
-        break;
-      }
-      y = drawWrappedText(item, BODY_X, y, BODY_W, 2) + 1;
-      shownCount++;
-    }
-
-    if (todoCount > TODO_VISIBLE_ITEMS) {
-      M5.Display.setCursor(BODY_X, todoHintY);
-      M5.Display.setTextColor(ORANGE, BLACK);
-      if (selectedTodoIndex < todoCount - 1) {
-        M5.Display.println("keep scrolling");
-      } else {
-        M5.Display.println("end of list");
-      }
-      M5.Display.setTextColor(WHITE, BLACK);
-    }
+    M5.Display.setTextColor(WHITE, BLACK);
   }
 
   drawDivider(BODY_Y + 66);
@@ -678,13 +665,26 @@ void scrollResponseView(int delta) {
 
 void processMicBuffer(int16_t *buffer, size_t sampleCount) {
   for (size_t i = 0; i < sampleCount; i++) {
-    float raw = static_cast<float>(buffer[i]);
+    float sample = static_cast<float>(buffer[i]);
 
-    // Track and remove slowly changing DC bias from the MEMS mic.
-    dcEstimate = (dcEstimate * 0.995f) + (raw * 0.005f);
-    float centered = raw - dcEstimate;
+    // Remove slow DC drift but otherwise preserve the raw speech waveform.
+    micDcEstimate = (micDcEstimate * 0.995f) + (sample * 0.005f);
+    float centered = sample - micDcEstimate;
 
-    buffer[i] = static_cast<int16_t>(constrain(centered, -32768.0f, 32767.0f));
+    // Apply a very gentle limiter only near the extremes to avoid hard clipping.
+    if (centered > 28000.0f) {
+      centered = 28000.0f + ((centered - 28000.0f) * 0.2f);
+    } else if (centered < -28000.0f) {
+      centered = -28000.0f + ((centered + 28000.0f) * 0.2f);
+    }
+
+    if (centered > 32767.0f) {
+      centered = 32767.0f;
+    } else if (centered < -32768.0f) {
+      centered = -32768.0f;
+    }
+
+    buffer[i] = static_cast<int16_t>(centered);
   }
 }
 
@@ -853,6 +853,7 @@ void loop() {
   if (M5.BtnB.wasReleased()) {
     if (assistantState == RECORDING) {
       assistantState = READY;
+      stopRequested = false;
       ws.sendTXT("cancel");
       lastResponse = "Recording canceled.";
       responseScrollOffset = 0;
@@ -888,18 +889,20 @@ void loop() {
       assistantState = RECORDING;
       screenMode = MODE_RESPONSE;
       firstResponseChunk = true;
+      stopRequested = false;
+      stopRequestedAt = 0;
+      micDcEstimate = 0.0f;
       lastTranscript = "";
       transcriptScrollOffset = 0;
       lastResponse = "Listening...";
       responseScrollOffset = 0;
-      dcEstimate = 0.0f;
       setTemporaryStatus("Recording...", RED, 2000);
       ws.sendTXT("start");
       renderScreen();
     } else if (assistantState == RECORDING) {
-      assistantState = PROCESSING;
-      setTemporaryStatus("Uploading...", YELLOW, 2500);
-      ws.sendTXT("stop");
+      stopRequested = true;
+      stopRequestedAt = millis();
+      setTemporaryStatus("Finishing...", YELLOW, 1200);
       renderScreen();
     }
   }
@@ -909,6 +912,15 @@ void loop() {
     if (M5.Mic.record(buffer, MIC_BUF_LEN, SAMPLE_RATE)) {
       processMicBuffer(buffer, MIC_BUF_LEN);
       ws.sendBIN((uint8_t *)buffer, sizeof(buffer));
+    }
+
+    if (stopRequested && millis() - stopRequestedAt >= STOP_TAIL_MS) {
+      assistantState = PROCESSING;
+      stopRequested = false;
+      stopRequestedAt = 0;
+      setTemporaryStatus("Uploading...", YELLOW, 2500);
+      ws.sendTXT("stop");
+      renderScreen();
     }
   }
 }
