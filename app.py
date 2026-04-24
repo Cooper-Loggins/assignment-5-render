@@ -19,7 +19,8 @@ MIN_AUDIO_BYTES = SAMPLE_RATE
 LLM_MODEL = "gemini-3.1-flash-lite-preview"
 SYSTEM_PROMPT = (
     "You are a helpful smart assistant for a small wearable screen. "
-    "Be concise, practical, and under 80 words."
+    "Be concise, practical, and under 80 words. "
+    "If the user includes multiple intents, answer the direct question first and then briefly mention any saved todo or note action."
 )
 AUDIO_SUBDIR = "audio"
 
@@ -403,12 +404,16 @@ def generate_assistant_response(transcript, created_todo):
     if client is None:
         return build_fallback_response(transcript, created_todo)
 
-    prompt = transcript
+    prompt = (
+        f"User said: {transcript}\n"
+        "Respond directly to the user's request."
+    )
     if created_todo:
         prompt = (
             f"User said: {transcript}\n"
             f"A todo was already created with title: {created_todo['title']}.\n"
-            "Acknowledge that briefly."
+            "Answer any direct question or request in the user's message first. "
+            "Then briefly mention that the todo was saved."
         )
 
     response = client.models.generate_content(
