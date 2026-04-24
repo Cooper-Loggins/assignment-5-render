@@ -260,7 +260,55 @@ def extract_explicit_todo_title(transcript):
     if best_start is None:
         return None
 
-    title = clean[best_start + len(best_marker):].strip(" .:,;!?")
+    title = clean[best_start + len(best_marker):]
+    lowered_title = title.lower()
+    cut_markers = [
+        "?",
+        ".",
+        " and what ",
+        " and when ",
+        " and where ",
+        " and why ",
+        " and who ",
+        " and how ",
+        " and can you ",
+        " and could you ",
+        " and would you ",
+        " and will you ",
+        " and do ",
+        " and does ",
+        " and did ",
+        " and is ",
+        " and are ",
+        " and tell me ",
+        " and show me ",
+        " and explain ",
+        " and give me ",
+        " but what ",
+        " but when ",
+        " but where ",
+        " but why ",
+        " but who ",
+        " but how ",
+        " also what ",
+        " also when ",
+        " also where ",
+        " also why ",
+        " also who ",
+        " also how ",
+    ]
+    cut_at = None
+    for marker in cut_markers:
+        idx = lowered_title.find(marker)
+        if idx == -1:
+            continue
+        if cut_at is None or idx < cut_at:
+            cut_at = idx
+
+    if cut_at is not None:
+        title = title[:cut_at]
+
+    title = title.strip(" .:,;!?")
     return title or None
 
 
