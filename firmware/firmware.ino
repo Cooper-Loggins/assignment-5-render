@@ -30,7 +30,7 @@
 #define DEVICE_API_KEY "Cooperlee7"
 
 #define SAMPLE_RATE 16000
-#define MIC_BUF_LEN 256
+#define MIC_BUF_LEN 1024
 #define STATE_REFRESH_MS 60000
 #define MAX_TODO_ITEMS 5
 #define MAX_WRAP_LINES 24
@@ -792,6 +792,14 @@ void connectAssistantSocket() {
   ws.setReconnectInterval(3000);
 }
 
+void markSocketUnavailable(const String &message = "Server unavailable") {
+  assistantState = DISCONNECTED;
+  stopRequested = false;
+  stopRequestedAt = 0;
+  setTemporaryStatus(message, RED, 2400);
+  renderScreen();
+}
+
 void setup() {
   auto cfg = M5.config();
   M5.begin(cfg);
@@ -912,19 +920,22 @@ void loop() {
     if (btnAHoldHandled) {
       btnAHoldHandled = false;
     } else if (assistantState == READY) {
-      assistantState = RECORDING;
-      screenMode = MODE_RESPONSE;
-      firstResponseChunk = true;
-      stopRequested = false;
-      stopRequestedAt = 0;
-      micDcEstimate = 0.0f;
-      lastTranscript = "";
-      transcriptScrollOffset = 0;
-      lastResponse = "Listening...";
-      responseScrollOffset = 0;
-      setTemporaryStatus("Recording...", RED, 2000);
-      ws.sendTXT("start");
-      renderScreen();
+      if (!ws.sendTXT("start")) {
+        markSocketUnavailable("Socket start failed");
+      } else {
+        assistantState = RECORDING;
+        screenMode = MODE_RESPONSE;
+        firstResponseChunk = true;
+        stopRequested = false;
+        stopRequestedAt = 0;
+        micDcEstimate = 0.0f;
+        lastTranscript = "";
+        transcriptScrollOffset = 0;
+        lastResponse = "Listening...";
+        responseScrollOffset = 0;
+        setTemporaryStatus("Recording...", RED, 2000);
+        renderScreen();
+      }
     } else if (assistantState == DISCONNECTED) {
       setTemporaryStatus("Wait for server reconnect", YELLOW, 2200);
       renderScreen();
@@ -940,15 +951,21 @@ void loop() {
     int16_t buffer[MIC_BUF_LEN];
     if (M5.Mic.record(buffer, MIC_BUF_LEN, SAMPLE_RATE)) {
       processMicBuffer(buffer, MIC_BUF_LEN);
-      ws.sendBIN((uint8_t *)buffer, sizeof(buffer));
+      if (!ws.sendBIN((uint8_t *)buffer, sizeof(buffer))) {
+        markSocketUnavailable("Audio upload failed");
+        return;
+      }
     }
 
     if (stopRequested && millis() - stopRequestedAt >= STOP_TAIL_MS) {
+      if (!ws.sendTXT("stop")) {
+        markSocketUnavailable("Stop upload failed");
+        return;
+      }
       assistantState = PROCESSING;
       stopRequested = false;
       stopRequestedAt = 0;
       setTemporaryStatus("Uploading...", YELLOW, 2500);
-      ws.sendTXT("stop");
       renderScreen();
     }
   }
