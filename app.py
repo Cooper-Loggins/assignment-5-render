@@ -625,6 +625,40 @@ def split_todo_clause(title):
     return cleaned
 
 
+def split_llm_todo_title(title):
+    clean = " ".join((title or "").strip().split())
+    if not clean:
+        return []
+
+    lowered = clean.lower()
+    positions = {0}
+    for marker in TODO_ACTION_STARTS:
+        search_start = 0
+        while True:
+            idx = lowered.find(marker, search_start)
+            if idx == -1:
+                break
+            if idx == 0 or lowered[idx - 1] == " ":
+                positions.add(idx)
+            search_start = idx + 1
+
+    ordered_positions = sorted(positions)
+    if ordered_positions == [0]:
+        return split_todo_clause(clean)
+
+    split_titles = []
+    for i, start in enumerate(ordered_positions):
+        end = ordered_positions[i + 1] if i + 1 < len(ordered_positions) else len(clean)
+        segment = clean[start:end].strip(" .:,;!?")
+        if not segment:
+            continue
+        for item in split_todo_clause(segment):
+            if len(todo_title_keywords(item)) >= 2 or len(item.split()) >= 2:
+                split_titles.append(item)
+
+    return merge_todo_titles(split_titles)
+
+
 def is_valid_explicit_todo_title(title):
     normalized = " ".join((title or "").strip().split()).strip(" .:,;!?")
     lowered = normalized.lower()
@@ -994,7 +1028,7 @@ def accepted_extracted_todo_titles(transcript, todo_titles):
     accepted = []
     for title in todo_titles or []:
         if should_accept_llm_todo_title(transcript, title):
-            split_titles = split_todo_clause(title)
+            split_titles = split_llm_todo_title(title)
             if len(split_titles) > 1:
                 accepted.extend(split_titles)
             else:
