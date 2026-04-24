@@ -4,10 +4,10 @@
 
 Preferences prefs;
 
-// TODO before submission: remove real Wi-Fi credentials from this setup sketch.
-const char* WIFI_SSID = "PAWS-Secure";
-const char* WIFI_USERNAME = "cll12396";
-const char* WIFI_PASSWORD = "Okcomputer315";
+// Temporary local Wi-Fi credentials. Remove these again before submission.
+const char* WIFI_SSID = "WhiteSky-TheConnectionAthens";
+const char* WIFI_USERNAME = "";
+const char* WIFI_PASSWORD = "GoDawgs255";
 
 void showMessage(const char* line1, const char* line2 = "", const char* line3 = "", uint16_t color = WHITE) {
   M5.Display.fillScreen(BLACK);
@@ -29,7 +29,11 @@ bool testWiFi() {
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
   delay(500);
-  WiFi.begin(WIFI_SSID, WPA2_AUTH_PEAP, WIFI_USERNAME, WIFI_USERNAME, WIFI_PASSWORD);
+  if (strlen(WIFI_USERNAME) > 0) {
+    WiFi.begin(WIFI_SSID, WPA2_AUTH_PEAP, WIFI_USERNAME, WIFI_USERNAME, WIFI_PASSWORD);
+  } else {
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  }
 
   showMessage("Saving WiFi...", "Testing connect");
 

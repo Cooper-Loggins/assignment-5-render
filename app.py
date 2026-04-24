@@ -584,6 +584,15 @@ def create_app():
                     audio_buffer.clear()
                     recording = True
 
+                elif message == "cancel":
+                    recording = False
+                    audio_buffer.clear()
+                    if interaction is not None:
+                        db.update_interaction(interaction["id"], status="canceled")
+                    ws.send("R:Recording canceled.")
+                    ws.send("D")
+                    interaction = None
+
                 elif message == "stop":
                     recording = False
                     if len(audio_buffer) < MIN_AUDIO_BYTES:

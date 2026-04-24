@@ -52,12 +52,15 @@ String lastNoteSummary = "No notes yet";
 String lastTranscript = "";
 String lastResponse = "Press A to record";
 String deviceMode = "todo";
+String tempStatusMessage = "";
 
 bool firstResponseChunk = true;
 unsigned long lastStateRefresh = 0;
 bool btnBHoldHandled = false;
 bool btnAHoldHandled = false;
 float dcEstimate = 0.0f;
+unsigned long tempStatusUntil = 0;
+uint16_t tempStatusColor = WHITE;
 
 const int SCREEN_W = 240;
 const int SCREEN_H = 135;
@@ -297,6 +300,16 @@ void drawDivider(int y) {
   M5.Display.drawFastHLine(BODY_X, y, BODY_W, DARKGREY);
 }
 
+bool hasTemporaryStatus() {
+  return tempStatusMessage.length() > 0 && millis() < tempStatusUntil;
+}
+
+void setTemporaryStatus(const String &message, uint16_t color, unsigned long durationMs = 2200) {
+  tempStatusMessage = sanitizeDisplayText(message);
+  tempStatusColor = color;
+  tempStatusUntil = millis() + durationMs;
+}
+
 void drawHeader(const char *label, uint16_t color) {
   M5.Display.fillRect(0, 0, SCREEN_W, HEADER_H, BLACK);
   M5.Display.setCursor(4, 2);
@@ -379,14 +392,22 @@ void renderTodoMode() {
   drawDivider(BODY_Y + 66);
   y = BODY_Y + 72;
   M5.Display.setCursor(BODY_X, y);
-  M5.Display.setTextColor(CYAN, BLACK);
-  M5.Display.println("HOLD B TO MARK DONE");
-  M5.Display.setTextColor(WHITE, BLACK);
-  y += LINE_H + 1;
-  if (todoCount == 0) {
-    drawWrappedText(lastNoteSummary, BODY_X, y, BODY_W, 3);
+  if (hasTemporaryStatus()) {
+    M5.Display.setTextColor(tempStatusColor, BLACK);
+    M5.Display.println("STATUS");
+    M5.Display.setTextColor(WHITE, BLACK);
+    y += LINE_H + 1;
+    drawWrappedText(tempStatusMessage, BODY_X, y, BODY_W, 3);
   } else {
-    drawWrappedText("Short B selects next task.", BODY_X, y, BODY_W, 3);
+    M5.Display.setTextColor(CYAN, BLACK);
+    M5.Display.println("HOLD B TO MARK DONE");
+    M5.Display.setTextColor(WHITE, BLACK);
+    y += LINE_H + 1;
+    if (todoCount == 0) {
+      drawWrappedText(lastNoteSummary, BODY_X, y, BODY_W, 3);
+    } else {
+      drawWrappedText("Short B selects next task.", BODY_X, y, BODY_W, 3);
+    }
   }
 }
 
@@ -409,7 +430,7 @@ void renderResponseMode() {
   clearBody();
   M5.Display.setCursor(BODY_X, BODY_Y);
   if (assistantState == RECORDING) {
-    M5.Display.println("A stop   B todo view");
+    M5.Display.println("A stop   B cancel");
   } else {
     M5.Display.println("A rec  hold A todo");
   }
@@ -427,10 +448,15 @@ void renderResponseMode() {
   y = BODY_Y + 60;
   M5.Display.setCursor(BODY_X, y);
   M5.Display.setTextColor(CYAN, BLACK);
-  M5.Display.println("ASSISTANT");
+  if (hasTemporaryStatus()) {
+    M5.Display.setTextColor(tempStatusColor, BLACK);
+    M5.Display.println("STATUS");
+  } else {
+    M5.Display.println("ASSISTANT");
+  }
   M5.Display.setTextColor(WHITE, BLACK);
   y += LINE_H + 1;
-  drawWrappedText(lastResponse, BODY_X, y, BODY_W, 4);
+  drawWrappedText(hasTemporaryStatus() ? tempStatusMessage : lastResponse, BODY_X, y, BODY_W, 4);
 }
 
 void renderScreen() {
@@ -452,6 +478,7 @@ void fetchDeviceState() {
 
   if (!http.begin(client, DEVICE_STATE_URL)) {
     lastResponse = "State fetch failed";
+    setTemporaryStatus("Server unavailable", RED);
     return;
   }
 
@@ -460,6 +487,7 @@ void fetchDeviceState() {
   if (code <= 0) {
     http.end();
     lastResponse = "State GET error";
+    setTemporaryStatus("Server unavailable", RED);
     return;
   }
 
@@ -514,12 +542,14 @@ void processMicBuffer(int16_t *buffer, size_t sampleCount) {
 void completeSelectedTodo() {
   if (WiFi.status() != WL_CONNECTED) {
     lastResponse = "WiFi required";
+    setTemporaryStatus("WiFi required", RED);
     renderScreen();
     return;
   }
 
   if (todoCount == 0 || selectedTodoIndex >= todoCount || todoIds[selectedTodoIndex] <= 0) {
     lastResponse = "No todo to mark done";
+    setTemporaryStatus("No todo selected", YELLOW);
     renderScreen();
     return;
   }
@@ -532,6 +562,7 @@ void completeSelectedTodo() {
 
   if (!http.begin(client, url)) {
     lastResponse = "Done request failed";
+    setTemporaryStatus("Server unavailable", RED);
     renderScreen();
     return;
   }
@@ -542,10 +573,12 @@ void completeSelectedTodo() {
 
   if (code > 0 && code < 300) {
     lastResponse = "Done: " + completedTitle;
+    setTemporaryStatus("Marked done", GREEN);
     fetchDeviceState();
     screenMode = MODE_TODOS;
   } else {
     lastResponse = "Done request error";
+    setTemporaryStatus("Done request error", RED);
   }
 
   renderScreen();
@@ -555,12 +588,14 @@ void onWebSocket(WStype_t type, uint8_t *payload, size_t length) {
   switch (type) {
     case WStype_DISCONNECTED:
       assistantState = DISCONNECTED;
+      setTemporaryStatus("Server unavailable", RED);
       renderScreen();
       break;
 
     case WStype_CONNECTED:
       assistantState = READY;
       lastResponse = "Ready for notes";
+      setTemporaryStatus("Connected", GREEN, 1500);
       renderScreen();
       break;
 
@@ -578,8 +613,12 @@ void onWebSocket(WStype_t type, uint8_t *payload, size_t length) {
           firstResponseChunk = false;
         }
         lastResponse += msg.substring(2);
+        if (msg.indexOf("Unauthorized") >= 0) {
+          setTemporaryStatus("Auth failed", RED, 2500);
+        }
       } else if (msg == "D") {
         assistantState = READY;
+        setTemporaryStatus("Success", GREEN, 1800);
         fetchDeviceState();
       }
 
@@ -659,7 +698,13 @@ void loop() {
   }
 
   if (M5.BtnB.wasReleased()) {
-    if (
+    if (assistantState == RECORDING) {
+      assistantState = READY;
+      ws.sendTXT("cancel");
+      lastResponse = "Recording canceled.";
+      setTemporaryStatus("Canceled", YELLOW, 1800);
+      renderScreen();
+    } else if (
       screenMode == MODE_TODOS &&
       assistantState != RECORDING &&
       assistantState != PROCESSING &&
@@ -685,10 +730,12 @@ void loop() {
       lastTranscript = "";
       lastResponse = "Listening...";
       dcEstimate = 0.0f;
+      setTemporaryStatus("Recording...", RED, 2000);
       ws.sendTXT("start");
       renderScreen();
     } else if (assistantState == RECORDING) {
       assistantState = PROCESSING;
+      setTemporaryStatus("Uploading...", YELLOW, 2500);
       ws.sendTXT("stop");
       renderScreen();
     }
