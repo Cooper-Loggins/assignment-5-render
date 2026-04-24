@@ -321,90 +321,149 @@ def question_clause_cut_markers():
     ]
 
 
+TODO_ACTION_STARTS = (
+    "call ",
+    "email ",
+    "text ",
+    "submit ",
+    "finish ",
+    "start ",
+    "study ",
+    "review ",
+    "check ",
+    "look up ",
+    "look into ",
+    "buy ",
+    "bring ",
+    "pay ",
+    "schedule ",
+    "send ",
+    "write ",
+    "clean ",
+    "make ",
+    "pick up ",
+    "determine ",
+    "update ",
+    "fix ",
+    "print ",
+    "read ",
+    "prepare ",
+    "go ",
+    "book ",
+    "plan ",
+    "organize ",
+    "reply ",
+    "respond ",
+    "message ",
+    "order ",
+    "cancel ",
+    "return ",
+    "renew ",
+    "finish up ",
+    "set up ",
+    "follow up ",
+    "turn in ",
+    "drop off ",
+    "fill out ",
+    "complete ",
+    "practice ",
+    "wash ",
+    "cook ",
+    "do ",
+)
+
+TODO_LIST_FILLERS = (
+    "and then ",
+    "then ",
+    "and also ",
+    "also ",
+    "plus ",
+    "next ",
+    "after that ",
+    "afterwards ",
+)
+
+
+def starts_with_todo_action(text):
+    lowered = (text or "").lower()
+    return lowered.startswith(tuple(explicit_todo_markers())) or lowered.startswith(TODO_ACTION_STARTS)
+
+
+def normalize_todo_fragment(text):
+    cleaned = " ".join((text or "").strip().split()).strip(" .:,;!?")
+    lowered = cleaned.lower()
+
+    changed = True
+    while changed and cleaned:
+        changed = False
+        for filler in TODO_LIST_FILLERS:
+            if lowered.startswith(filler):
+                cleaned = cleaned[len(filler):].strip(" .:,;!?")
+                lowered = cleaned.lower()
+                changed = True
+                break
+
+    if lowered.startswith("and "):
+        remainder = cleaned[4:].strip(" .:,;!?")
+        if remainder and starts_with_todo_action(remainder):
+            cleaned = remainder
+
+    return cleaned
+
+
+def is_likely_todo_action(text):
+    cleaned = normalize_todo_fragment(text)
+    lowered = cleaned.lower()
+    if not lowered:
+        return False
+
+    return starts_with_todo_action(lowered)
+
+
+def split_todo_fragment(text):
+    piece = normalize_todo_fragment(text)
+    if not piece:
+        return []
+
+    candidate_markers = [
+        " and then ",
+        ", then ",
+        " then ",
+        " and also ",
+        ", also ",
+        " also ",
+        "; ",
+        ", and ",
+        ", ",
+        " and ",
+    ]
+
+    lowered_piece = piece.lower()
+    for marker in candidate_markers:
+        search_start = 0
+        while True:
+            idx = lowered_piece.find(marker, search_start)
+            if idx == -1:
+                break
+
+            left = piece[:idx]
+            right = piece[idx + len(marker):]
+            if is_likely_todo_action(left) and is_likely_todo_action(right):
+                return split_todo_fragment(left) + split_todo_fragment(right)
+
+            search_start = idx + 1
+
+    return [piece]
+
+
 def split_todo_clause(title):
     clean = " ".join((title or "").strip().split())
     if not clean:
         return []
 
-    items = [clean]
-    list_cut_markers = [
-        ", then ",
-        " then ",
-        ", also ",
-        " also ",
-        ", and then ",
-        " and then ",
-    ]
-    for marker in list_cut_markers:
-        next_items = []
-        for item in items:
-            next_items.extend(part for part in item.split(marker) if part.strip())
-        items = next_items
-
-    verb_like_starts = (
-        "call ",
-        "email ",
-        "text ",
-        "submit ",
-        "finish ",
-        "start ",
-        "study ",
-        "review ",
-        "check ",
-        "look up ",
-        "look into ",
-        "buy ",
-        "bring ",
-        "pay ",
-        "schedule ",
-        "send ",
-        "write ",
-        "clean ",
-        "make ",
-        "pick up ",
-        "determine ",
-        "update ",
-        "fix ",
-        "print ",
-        "read ",
-        "prepare ",
-        "go ",
-    )
-
-    final_items = []
-    for item in items:
-        piece = item.strip(" .:,;!?")
-        lowered_piece = piece.lower()
-        split_idx = None
-        and_positions = []
-        search_start = 0
-        while True:
-            idx = lowered_piece.find(" and ", search_start)
-            if idx == -1:
-                break
-            and_positions.append(idx)
-            search_start = idx + 1
-
-        for idx in and_positions:
-            rhs = lowered_piece[idx + 5 :].strip()
-            if rhs.startswith(verb_like_starts):
-                split_idx = idx
-                break
-
-        if split_idx is not None:
-            left = piece[:split_idx].strip(" .:,;!?")
-            right = piece[split_idx + 5 :].strip(" .:,;!?")
-            if left:
-                final_items.append(left)
-            if right:
-                final_items.append(right)
-        else:
-            if piece:
-                final_items.append(piece)
-
     cleaned = []
     seen = set()
-    for item in final_items:
+    for item in split_todo_fragment(clean):
         normalized = item.strip(" .:,;!?")
         lowered = normalized.lower().rstrip(" ,")
         if lowered.endswith(" and"):
