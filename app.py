@@ -633,7 +633,17 @@ def create_app():
     @app.get("/api/interactions")
     @require_dashboard_auth
     def list_interactions():
-        return jsonify({"items": db.fetch_interactions(), "status": "ok"})
+        try:
+            items = db.fetch_interactions()
+        except Exception as exc:
+            return jsonify(
+                {
+                    "items": [],
+                    "message": f"interactions temporarily unavailable: {exc}",
+                    "status": "degraded",
+                }
+            )
+        return jsonify({"items": items, "status": "ok"})
 
     @app.post("/api/interactions/<int:interaction_id>/delete")
     @require_dashboard_auth

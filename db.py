@@ -37,8 +37,10 @@ def get_db():
     if db is None:
         db_path = current_app.config["DATABASE_PATH"]
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        db = sqlite3.connect(db_path)
+        db = sqlite3.connect(db_path, timeout=10)
         db.row_factory = sqlite3.Row
+        db.execute("PRAGMA journal_mode=WAL")
+        db.execute("PRAGMA busy_timeout = 10000")
         g._database = db
     return db
 

@@ -1093,7 +1093,7 @@
         }
 
         async function refreshAll() {
-            const [health, todos, notes, interactions, device] = await Promise.all([
+            const [healthResult, todosResult, notesResult, interactionsResult, deviceResult] = await Promise.allSettled([
                 apiGet("/healthz"),
                 apiGet("/api/todos"),
                 apiGet("/api/notes"),
@@ -1101,11 +1101,27 @@
                 apiGet("/api/device/state"),
             ]);
 
-            state.health = health;
-            state.todos = todos.items || [];
-            state.notes = notes.items || [];
-            state.interactions = interactions.items || [];
-            state.device = device;
+            if (healthResult.status === "fulfilled") {
+                state.health = healthResult.value;
+            }
+            if (todosResult.status === "fulfilled") {
+                state.todos = todosResult.value.items || [];
+            }
+            if (notesResult.status === "fulfilled") {
+                state.notes = notesResult.value.items || [];
+            }
+            if (interactionsResult.status === "fulfilled") {
+                state.interactions = interactionsResult.value.items || [];
+                if (interactionsResult.value.status === "degraded") {
+                    setFlash("note-flash", interactionsResult.value.message || "Interaction history is temporarily unavailable.", "error");
+                }
+            } else {
+                state.interactions = [];
+                setFlash("note-flash", interactionsResult.reason?.message || "Interaction history is temporarily unavailable.", "error");
+            }
+            if (deviceResult.status === "fulfilled") {
+                state.device = deviceResult.value;
+            }
             renderAll();
         }
 
