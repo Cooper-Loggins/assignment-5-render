@@ -39,6 +39,7 @@
 WebSocketsClient ws;
 Preferences prefs;
 String wsExtraHeaders;
+bool wifiWasConnected = false;
 
 enum AssistantState { DISCONNECTED, READY, RECORDING, PROCESSING };
 AssistantState assistantState = DISCONNECTED;
@@ -784,6 +785,13 @@ void onWebSocket(WStype_t type, uint8_t *payload, size_t length) {
   }
 }
 
+void connectAssistantSocket() {
+  ws.disconnect();
+  ws.beginSSL(SERVER_HOST, SERVER_PORT, WS_PATH);
+  ws.onEvent(onWebSocket);
+  ws.setReconnectInterval(3000);
+}
+
 void setup() {
   auto cfg = M5.config();
   M5.begin(cfg);
@@ -803,12 +811,11 @@ void setup() {
     }
   }
 
+  wifiWasConnected = true;
   M5.Speaker.end();
   M5.Mic.begin();
 
-  ws.beginSSL(SERVER_HOST, SERVER_PORT, WS_PATH);
-  ws.onEvent(onWebSocket);
-  ws.setReconnectInterval(3000);
+  connectAssistantSocket();
 
   fetchDeviceState();
   renderScreen();
@@ -818,8 +825,27 @@ void loop() {
   M5.update();
   ws.loop();
 
-  if (WiFi.status() != WL_CONNECTED) {
+  bool wifiConnected = WiFi.status() == WL_CONNECTED;
+  if (!wifiConnected) {
+    if (wifiWasConnected) {
+      wifiWasConnected = false;
+      assistantState = DISCONNECTED;
+      stopRequested = false;
+      setTemporaryStatus("WiFi reconnecting", YELLOW, 2000);
+      ws.disconnect();
+      renderScreen();
+    }
     connectWiFi();
+    wifiConnected = WiFi.status() == WL_CONNECTED;
+  }
+
+  if (wifiConnected && !wifiWasConnected) {
+    wifiWasConnected = true;
+    assistantState = DISCONNECTED;
+    setTemporaryStatus("WiFi back, reconnecting", YELLOW, 2200);
+    connectAssistantSocket();
+    fetchDeviceState();
+    renderScreen();
   }
 
   if (millis() - lastStateRefresh > STATE_REFRESH_MS && assistantState != RECORDING) {
@@ -885,7 +911,7 @@ void loop() {
   if (M5.BtnA.wasReleased()) {
     if (btnAHoldHandled) {
       btnAHoldHandled = false;
-    } else if (assistantState == READY || assistantState == DISCONNECTED) {
+    } else if (assistantState == READY) {
       assistantState = RECORDING;
       screenMode = MODE_RESPONSE;
       firstResponseChunk = true;
@@ -898,6 +924,9 @@ void loop() {
       responseScrollOffset = 0;
       setTemporaryStatus("Recording...", RED, 2000);
       ws.sendTXT("start");
+      renderScreen();
+    } else if (assistantState == DISCONNECTED) {
+      setTemporaryStatus("Wait for server reconnect", YELLOW, 2200);
       renderScreen();
     } else if (assistantState == RECORDING) {
       stopRequested = true;
