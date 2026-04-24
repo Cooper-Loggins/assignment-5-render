@@ -238,33 +238,54 @@ def analyze_voice_note(transcript):
     }
 
 
+TODO_INTENT_MARKERS = (
+    "todo ",
+    "todo:",
+    "to do ",
+    "to do:",
+    "to-do ",
+    "to-do:",
+    "add todo ",
+    "add a todo ",
+    "add to do ",
+    "add a to do ",
+    "remember to ",
+    "remind me to ",
+    "i need to ",
+    "i should ",
+    "i have to ",
+    "i must ",
+    "i ought to ",
+    "i'm going to ",
+    "im going to ",
+    "i gotta ",
+    "i've got to ",
+    "ive got to ",
+    "i want to ",
+    "i plan to ",
+    "i need to remember to ",
+    "i need to make sure to ",
+    "make sure to ",
+    "be sure to ",
+    "don't let me forget to ",
+    "do not let me forget to ",
+    "don't forget to ",
+    "do not forget to ",
+    "need to ",
+    "have to ",
+    "must ",
+    "please remember to ",
+    "please remind me to ",
+)
+
+
 def find_explicit_todo_marker(transcript):
     clean = " ".join((transcript or "").strip().split())
     lowered = clean.lower()
-    markers = [
-        "todo ",
-        "todo:",
-        "to do ",
-        "to do:",
-        "to-do ",
-        "to-do:",
-        "add todo ",
-        "add a todo ",
-        "add to do ",
-        "add a to do ",
-        "remember to ",
-        "remind me to ",
-        "i need to ",
-        "i should ",
-        "i have to ",
-        "i must ",
-        "don't let me forget to ",
-        "do not let me forget to ",
-    ]
 
     best_start = None
     best_marker = None
-    for marker in markers:
+    for marker in TODO_INTENT_MARKERS:
         idx = lowered.find(marker)
         if idx == -1:
             continue
@@ -278,26 +299,7 @@ def find_explicit_todo_marker(transcript):
 
 
 def explicit_todo_markers():
-    return [
-        "todo ",
-        "todo:",
-        "to do ",
-        "to do:",
-        "to-do ",
-        "to-do:",
-        "add todo ",
-        "add a todo ",
-        "add to do ",
-        "add a to do ",
-        "remember to ",
-        "remind me to ",
-        "i need to ",
-        "i should ",
-        "i have to ",
-        "i must ",
-        "don't let me forget to ",
-        "do not let me forget to ",
-    ]
+    return list(TODO_INTENT_MARKERS)
 
 
 def question_clause_cut_markers():
@@ -342,14 +344,19 @@ TODO_ACTION_STARTS = (
     "call ",
     "email ",
     "text ",
+    "phone ",
+    "ring ",
     "submit ",
     "finish ",
     "start ",
+    "stop ",
     "study ",
     "review ",
     "check ",
     "look up ",
     "look into ",
+    "research ",
+    "investigate ",
     "buy ",
     "bring ",
     "pay ",
@@ -358,20 +365,32 @@ TODO_ACTION_STARTS = (
     "write ",
     "clean ",
     "make ",
+    "build ",
+    "create ",
     "pick up ",
+    "drop by ",
     "determine ",
     "update ",
     "fix ",
+    "repair ",
+    "replace ",
+    "install ",
+    "remove ",
     "print ",
     "read ",
     "prepare ",
     "go ",
+    "visit ",
+    "meet ",
+    "attend ",
+    "join ",
     "book ",
     "plan ",
     "organize ",
     "reply ",
     "respond ",
     "message ",
+    "contact ",
     "order ",
     "cancel ",
     "return ",
@@ -387,6 +406,29 @@ TODO_ACTION_STARTS = (
     "wash ",
     "cook ",
     "do ",
+    "take ",
+    "get ",
+    "grab ",
+    "pack ",
+    "unpack ",
+    "move ",
+    "file ",
+    "sign ",
+    "sign up ",
+    "sign off ",
+    "upload ",
+    "download ",
+    "backup ",
+    "back up ",
+    "charge ",
+    "water ",
+    "feed ",
+    "fold ",
+    "mow ",
+    "vacuum ",
+    "sweep ",
+    "call back ",
+    "text back ",
 )
 
 TODO_LIST_FILLERS = (
@@ -675,16 +717,60 @@ def maybe_create_todos(transcript):
     return [db.insert_todo(title) for title in titles]
 
 
+def todo_title_keywords(title):
+    stopwords = {
+        "a",
+        "an",
+        "the",
+        "my",
+        "your",
+        "our",
+        "their",
+        "that",
+        "this",
+        "these",
+        "those",
+        "some",
+        "later",
+    }
+    normalized = " ".join((title or "").strip().split()).strip(" .:,;!?").lower()
+    return {word for word in re.findall(r"[a-z0-9']+", normalized) if len(word) > 1 and word not in stopwords}
+
+
+def are_similar_todo_titles(left, right):
+    left_normalized = " ".join((left or "").strip().split()).strip(" .:,;!?").lower()
+    right_normalized = " ".join((right or "").strip().split()).strip(" .:,;!?").lower()
+    if not left_normalized or not right_normalized:
+        return False
+    if left_normalized == right_normalized:
+        return True
+
+    left_keywords = todo_title_keywords(left)
+    right_keywords = todo_title_keywords(right)
+    if not left_keywords or not right_keywords:
+        return False
+
+    return left_keywords <= right_keywords or right_keywords <= left_keywords
+
+
 def merge_todo_titles(*groups):
     merged = []
-    seen = set()
     for group in groups:
         for title in group or []:
             normalized = " ".join((title or "").strip().split()).strip(" .:,;!?")
-            lowered = normalized.lower()
-            if normalized and lowered not in seen:
-                seen.add(lowered)
+            if not normalized:
+                continue
+
+            replacement_index = None
+            for idx, existing in enumerate(merged):
+                if are_similar_todo_titles(existing, normalized):
+                    replacement_index = idx
+                    break
+
+            if replacement_index is None:
                 merged.append(normalized)
+            elif len(normalized) > len(merged[replacement_index]):
+                merged[replacement_index] = normalized
     return merged
 
 
