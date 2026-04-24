@@ -994,7 +994,11 @@ def accepted_extracted_todo_titles(transcript, todo_titles):
     accepted = []
     for title in todo_titles or []:
         if should_accept_llm_todo_title(transcript, title):
-            accepted.append(title)
+            split_titles = split_todo_clause(title)
+            if len(split_titles) > 1:
+                accepted.extend(split_titles)
+            else:
+                accepted.append(title)
     return merge_todo_titles(accepted)
 
 
