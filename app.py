@@ -321,6 +321,102 @@ def question_clause_cut_markers():
     ]
 
 
+def split_todo_clause(title):
+    clean = " ".join((title or "").strip().split())
+    if not clean:
+        return []
+
+    items = [clean]
+    list_cut_markers = [
+        ", then ",
+        " then ",
+        ", also ",
+        " also ",
+        ", and then ",
+        " and then ",
+    ]
+    for marker in list_cut_markers:
+        next_items = []
+        for item in items:
+            next_items.extend(part for part in item.split(marker) if part.strip())
+        items = next_items
+
+    verb_like_starts = (
+        "call ",
+        "email ",
+        "text ",
+        "submit ",
+        "finish ",
+        "start ",
+        "study ",
+        "review ",
+        "check ",
+        "look up ",
+        "look into ",
+        "buy ",
+        "bring ",
+        "pay ",
+        "schedule ",
+        "send ",
+        "write ",
+        "clean ",
+        "make ",
+        "pick up ",
+        "determine ",
+        "update ",
+        "fix ",
+        "print ",
+        "read ",
+        "prepare ",
+        "go ",
+    )
+
+    final_items = []
+    for item in items:
+        piece = item.strip(" .:,;!?")
+        lowered_piece = piece.lower()
+        split_idx = None
+        and_positions = []
+        search_start = 0
+        while True:
+            idx = lowered_piece.find(" and ", search_start)
+            if idx == -1:
+                break
+            and_positions.append(idx)
+            search_start = idx + 1
+
+        for idx in and_positions:
+            rhs = lowered_piece[idx + 5 :].strip()
+            if rhs.startswith(verb_like_starts):
+                split_idx = idx
+                break
+
+        if split_idx is not None:
+            left = piece[:split_idx].strip(" .:,;!?")
+            right = piece[split_idx + 5 :].strip(" .:,;!?")
+            if left:
+                final_items.append(left)
+            if right:
+                final_items.append(right)
+        else:
+            if piece:
+                final_items.append(piece)
+
+    cleaned = []
+    seen = set()
+    for item in final_items:
+        normalized = item.strip(" .:,;!?")
+        lowered = normalized.lower().rstrip(" ,")
+        if lowered.endswith(" and"):
+            normalized = normalized[:-4].rstrip(" .:,;!?")
+            lowered = normalized.lower()
+        if normalized and lowered not in seen:
+            seen.add(lowered)
+            cleaned.append(normalized)
+
+    return cleaned
+
+
 def extract_explicit_todo_titles(transcript):
     clean = " ".join((transcript or "").strip().split())
     lowered = clean.lower()
@@ -357,9 +453,9 @@ def extract_explicit_todo_titles(transcript):
         if cut_at is not None:
             title = title[:cut_at]
 
-        title = title.strip(" .:,;!?")
-        if title and title.lower() not in {item["title"].lower() for item in titles}:
-            titles.append({"title": title})
+        for split_title in split_todo_clause(title):
+            if split_title and split_title.lower() not in {item["title"].lower() for item in titles}:
+                titles.append({"title": split_title})
 
     return [item["title"] for item in titles]
 

@@ -30,7 +30,7 @@
 #define DEVICE_API_KEY "Cooperlee7"
 
 #define SAMPLE_RATE 16000
-#define MIC_BUF_LEN 1024
+#define MIC_BUF_LEN 512
 #define STATE_REFRESH_MS 60000
 #define MAX_TODO_ITEMS 5
 #define MAX_WRAP_LINES 24
