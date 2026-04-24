@@ -792,9 +792,12 @@ def create_app():
     @app.post("/api/notes/clear")
     @require_dashboard_auth
     def clear_notes():
-        for note in db.fetch_notes():
-            remove_audio_file(note.get("audio_path"))
-        db.clear_notes()
+        try:
+            for note in db.fetch_notes():
+                remove_audio_file(note.get("audio_path"))
+            db.clear_notes()
+        except Exception as exc:
+            return jsonify({"status": "error", "message": f"failed to clear notes: {exc}"}), 500
         return jsonify({"status": "ok"})
 
     @app.get("/api/interactions")

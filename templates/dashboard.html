@@ -808,10 +808,16 @@
 
         async function apiGet(url) {
             const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error(`GET ${url} failed with ${response.status}`);
+            let data = null;
+            try {
+                data = await response.json();
+            } catch (_error) {
+                data = null;
             }
-            return response.json();
+            if (!response.ok) {
+                throw new Error(data?.message || `GET ${url} failed with ${response.status}`);
+            }
+            return data || {};
         }
 
         async function apiPost(url, payload) {
@@ -820,11 +826,16 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
             });
-            const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data.message || `POST ${url} failed with ${response.status}`);
+            let data = null;
+            try {
+                data = await response.json();
+            } catch (_error) {
+                data = null;
             }
-            return data;
+            if (!response.ok) {
+                throw new Error(data?.message || `POST ${url} failed with ${response.status}`);
+            }
+            return data || {};
         }
 
         async function apiPostForm(url, formData) {
@@ -832,11 +843,16 @@
                 method: "POST",
                 body: formData,
             });
-            const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data.message || `POST ${url} failed with ${response.status}`);
+            let data = null;
+            try {
+                data = await response.json();
+            } catch (_error) {
+                data = null;
             }
-            return data;
+            if (!response.ok) {
+                throw new Error(data?.message || `POST ${url} failed with ${response.status}`);
+            }
+            return data || {};
         }
 
         function renderStats() {
