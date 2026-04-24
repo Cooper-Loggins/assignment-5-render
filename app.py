@@ -588,7 +588,7 @@ def create_app():
                     recording = False
                     audio_buffer.clear()
                     if interaction is not None:
-                        db.update_interaction(interaction["id"], status="canceled")
+                        db.delete_interaction(interaction["id"])
                     ws.send("R:Recording canceled.")
                     ws.send("D")
                     interaction = None

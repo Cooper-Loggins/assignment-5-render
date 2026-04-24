@@ -618,7 +618,6 @@ void onWebSocket(WStype_t type, uint8_t *payload, size_t length) {
         }
       } else if (msg == "D") {
         assistantState = READY;
-        setTemporaryStatus("Success", GREEN, 1800);
         fetchDeviceState();
       }
 
