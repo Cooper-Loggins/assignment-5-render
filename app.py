@@ -313,7 +313,7 @@ def should_accept_extracted_todo(transcript, todo_title):
         return False
 
     lowered = " ".join(transcript.lower().strip().split())
-    explicit_todo_signals = [
+    explicit_todo_starts = [
         "todo ",
         "todo:",
         "to do ",
@@ -333,23 +333,23 @@ def should_accept_extracted_todo(transcript, todo_title):
         "do not let me forget to ",
     ]
 
-    if lowered.startswith(tuple(explicit_todo_signals)):
+    if lowered.startswith(tuple(explicit_todo_starts)):
         return True
     if should_ignore_extracted_todo(transcript):
         return False
 
-    commitment_markers = [
-        "i need to ",
-        "i should ",
-        "i have to ",
-        "i must ",
-        "need to ",
-        "have to ",
-        "must ",
-        "remember to ",
-        "remind me to ",
+    explicit_todo_markers = [
+        " remember to ",
+        " remind me to ",
+        " i need to ",
+        " i should ",
+        " i have to ",
+        " i must ",
+        " don't let me forget to ",
+        " do not let me forget to ",
     ]
-    return any(marker in lowered for marker in commitment_markers)
+    padded = f" {lowered} "
+    return any(marker in padded for marker in explicit_todo_markers)
 
 
 def build_fallback_response(transcript, created_todo):
