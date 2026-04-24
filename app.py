@@ -17,8 +17,10 @@ import db
 SAMPLE_RATE = 16000
 MIN_AUDIO_BYTES = SAMPLE_RATE
 PCM_BYTES_PER_SECOND = SAMPLE_RATE * 2
-MAX_STT_CHUNK_SECONDS = 8
+MAX_STT_CHUNK_SECONDS = 15
+MIN_STT_CHUNK_SECONDS = 3
 MAX_STT_CHUNK_BYTES = PCM_BYTES_PER_SECOND * MAX_STT_CHUNK_SECONDS
+MIN_STT_CHUNK_BYTES = PCM_BYTES_PER_SECOND * MIN_STT_CHUNK_SECONDS
 LLM_MODEL = "gemini-3.1-flash-lite-preview"
 SYSTEM_PROMPT = (
     "You are a helpful smart assistant for a small wearable screen. "
@@ -133,11 +135,7 @@ def transcribe_audio(audio_bytes):
     if not wit_token:
         return "(transcription unavailable: set WIT_TOKEN)"
 
-    chunks = [
-        audio_bytes[i : i + MAX_STT_CHUNK_BYTES]
-        for i in range(0, len(audio_bytes), MAX_STT_CHUNK_BYTES)
-        if audio_bytes[i : i + MAX_STT_CHUNK_BYTES]
-    ]
+    chunks = split_audio_for_stt(audio_bytes)
     print(
         f"[stt] total_bytes={len(audio_bytes)} chunk_count={len(chunks)} "
         f"chunk_seconds~={len(audio_bytes) / PCM_BYTES_PER_SECOND:.2f}"
@@ -167,6 +165,23 @@ def transcribe_audio_chunk(wit_token, audio_bytes):
         f"transcript={transcript!r}"
     )
     return transcript
+
+
+def split_audio_for_stt(audio_bytes):
+    if len(audio_bytes) <= MAX_STT_CHUNK_BYTES:
+        return [audio_bytes] if audio_bytes else []
+
+    chunks = [
+        audio_bytes[i : i + MAX_STT_CHUNK_BYTES]
+        for i in range(0, len(audio_bytes), MAX_STT_CHUNK_BYTES)
+        if audio_bytes[i : i + MAX_STT_CHUNK_BYTES]
+    ]
+
+    if len(chunks) >= 2 and len(chunks[-1]) < MIN_STT_CHUNK_BYTES:
+        chunks[-2] += chunks[-1]
+        chunks.pop()
+
+    return chunks
 
 
 def merge_transcript_segments(segments):
