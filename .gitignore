@@ -1,5 +1,7 @@
 .env
 .venv/
 __pycache__/
+.pycache/
 *.pyc
 assignment5.db
+.DS_Store
