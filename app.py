@@ -138,8 +138,13 @@ def transcribe_audio(audio_bytes):
         for i in range(0, len(audio_bytes), MAX_STT_CHUNK_BYTES)
         if audio_bytes[i : i + MAX_STT_CHUNK_BYTES]
     ]
+    print(
+        f"[stt] total_bytes={len(audio_bytes)} chunk_count={len(chunks)} "
+        f"chunk_seconds~={len(audio_bytes) / PCM_BYTES_PER_SECOND:.2f}"
+    )
     transcripts = [transcribe_audio_chunk(wit_token, chunk) for chunk in chunks]
     merged = merge_transcript_segments(transcripts)
+    print(f"[stt] merged_transcript={merged!r}")
     return merged or "(no speech detected)"
 
 
@@ -155,7 +160,13 @@ def transcribe_audio_chunk(wit_token, audio_bytes):
     with urllib.request.urlopen(req, timeout=30) as resp:
         body = resp.read().decode()
     result = parse_last_json(body)
-    return result.get("text", "").strip()
+    transcript = result.get("text", "").strip()
+    print(
+        f"[stt] chunk_bytes={len(audio_bytes)} "
+        f"chunk_seconds~={len(audio_bytes) / PCM_BYTES_PER_SECOND:.2f} "
+        f"transcript={transcript!r}"
+    )
+    return transcript
 
 
 def merge_transcript_segments(segments):
