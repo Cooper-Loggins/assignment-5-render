@@ -260,14 +260,31 @@ def find_explicit_todo_marker(transcript):
     return clean, best_start, best_marker
 
 
-def extract_explicit_todo_title(transcript):
-    clean, best_start, best_marker = find_explicit_todo_marker(transcript)
-    if best_start is None:
-        return None
+def explicit_todo_markers():
+    return [
+        "todo ",
+        "todo:",
+        "to do ",
+        "to do:",
+        "to-do ",
+        "to-do:",
+        "add todo ",
+        "add a todo ",
+        "add to do ",
+        "add a to do ",
+        "remember to ",
+        "remind me to ",
+        "i need to ",
+        "i should ",
+        "i have to ",
+        "i must ",
+        "don't let me forget to ",
+        "do not let me forget to ",
+    ]
 
-    title = clean[best_start + len(best_marker):]
-    lowered_title = title.lower()
-    cut_markers = [
+
+def question_clause_cut_markers():
+    return [
         "?",
         ".",
         " and what ",
@@ -302,19 +319,54 @@ def extract_explicit_todo_title(transcript):
         " also who ",
         " also how ",
     ]
-    cut_at = None
-    for marker in cut_markers:
-        idx = lowered_title.find(marker)
-        if idx == -1:
-            continue
-        if cut_at is None or idx < cut_at:
-            cut_at = idx
 
-    if cut_at is not None:
-        title = title[:cut_at]
 
-    title = title.strip(" .:,;!?")
-    return title or None
+def extract_explicit_todo_titles(transcript):
+    clean = " ".join((transcript or "").strip().split())
+    lowered = clean.lower()
+    markers = explicit_todo_markers()
+    cut_markers = question_clause_cut_markers()
+
+    occurrences = []
+    for marker in markers:
+        start = 0
+        while True:
+            idx = lowered.find(marker, start)
+            if idx == -1:
+                break
+            if idx == 0 or not lowered[idx - 1].isalnum():
+                occurrences.append((idx, marker))
+            start = idx + 1
+
+    occurrences.sort(key=lambda item: item[0])
+    titles = []
+
+    for i, (idx, marker) in enumerate(occurrences):
+        next_start = occurrences[i + 1][0] if i + 1 < len(occurrences) else len(clean)
+        title = clean[idx + len(marker):next_start]
+        lowered_title = title.lower()
+
+        cut_at = None
+        for cut_marker in cut_markers:
+            cut_idx = lowered_title.find(cut_marker)
+            if cut_idx == -1:
+                continue
+            if cut_at is None or cut_idx < cut_at:
+                cut_at = cut_idx
+
+        if cut_at is not None:
+            title = title[:cut_at]
+
+        title = title.strip(" .:,;!?")
+        if title and title.lower() not in {item["title"].lower() for item in titles}:
+            titles.append({"title": title})
+
+    return [item["title"] for item in titles]
+
+
+def extract_explicit_todo_title(transcript):
+    titles = extract_explicit_todo_titles(transcript)
+    return titles[0] if titles else None
 
 
 def extract_question_clause(transcript):
@@ -356,6 +408,11 @@ def maybe_create_todo(transcript):
     if title:
         return db.insert_todo(title)
     return None
+
+
+def maybe_create_todos(transcript):
+    titles = extract_explicit_todo_titles(transcript)
+    return [db.insert_todo(title) for title in titles]
 
 
 def should_ignore_extracted_todo(transcript):
@@ -463,9 +520,12 @@ def should_accept_extracted_todo(transcript, todo_title):
     return any(marker in padded for marker in explicit_todo_markers)
 
 
-def build_fallback_response(transcript, created_todo):
-    if created_todo:
-        return f"Added to your to-do list: {created_todo['title']}"
+def build_fallback_response(transcript, created_todos):
+    if created_todos:
+        if len(created_todos) == 1:
+            return f"Added to your to-do list: {created_todos[0]['title']}"
+        preview = ", ".join(item["title"] for item in created_todos[:3])
+        return f"Added {len(created_todos)} to-dos: {preview}"
 
     open_todos = db.fetch_todos(limit=3, include_completed=False)
     if open_todos:
@@ -504,18 +564,27 @@ def transcript_has_question_intent(transcript):
     return clean.startswith(tuple(question_starts))
 
 
-def ensure_todo_acknowledged(response_text, created_todo):
-    if not created_todo:
+def ensure_todo_acknowledged(response_text, created_todos):
+    if not created_todos:
         return response_text
 
     clean = (response_text or "").strip()
-    title = created_todo["title"]
+    if len(created_todos) == 1:
+        title = created_todos[0]["title"]
+        lowered = clean.lower()
+        if title.lower() in lowered or "to-do" in lowered or "todo" in lowered:
+            return clean
+
+        suffix = f" I also added this to your to-do list: {title}."
+        return (clean + suffix).strip() if clean else f"Added to your to-do list: {title}"
+
+    preview = ", ".join(item["title"] for item in created_todos[:3])
     lowered = clean.lower()
-    if title.lower() in lowered or "to-do" in lowered or "todo" in lowered:
+    if "to-do" in lowered or "todo" in lowered:
         return clean
 
-    suffix = f" I also added this to your to-do list: {title}."
-    return (clean + suffix).strip() if clean else f"Added to your to-do list: {title}"
+    suffix = f" I also added {len(created_todos)} to-dos: {preview}."
+    return (clean + suffix).strip() if clean else f"Added {len(created_todos)} to-dos: {preview}"
 
 
 def process_audio_note(audio_bytes, source="device"):
@@ -532,9 +601,9 @@ def process_audio_note(audio_bytes, source="device"):
     if not should_accept_extracted_todo(transcript, extracted_todo_title):
         extracted_todo_title = None
 
-    created_todo = maybe_create_todo(transcript)
-    if created_todo is None and extracted_todo_title:
-        created_todo = db.insert_todo(extracted_todo_title)
+    created_todos = maybe_create_todos(transcript)
+    if not created_todos and extracted_todo_title:
+        created_todos = [db.insert_todo(extracted_todo_title)]
 
     note = db.insert_note(
         transcript=transcript,
@@ -545,29 +614,31 @@ def process_audio_note(audio_bytes, source="device"):
 
     return {
         "audio_path": audio_path,
-        "created_todo": created_todo,
+        "created_todo": created_todos[0] if created_todos else None,
+        "created_todos": created_todos,
         "note": note,
         "summary": summary,
         "transcript": transcript,
     }
 
 
-def generate_assistant_response(transcript, created_todo):
+def generate_assistant_response(transcript, created_todos):
     client = get_llm_client()
     if client is None:
-        return build_fallback_response(transcript, created_todo)
+        return build_fallback_response(transcript, created_todos)
 
     question_clause = extract_question_clause(transcript)
     prompt = (
         f"User said: {transcript}\n"
         "Respond directly to the user's request."
     )
-    if created_todo:
+    if created_todos:
+        todo_summary = "; ".join(item["title"] for item in created_todos[:3])
         prompt = (
             f"User said: {question_clause or transcript}\n"
-            f"A todo was already created with title: {created_todo['title']}.\n"
+            f"These to-dos were already created: {todo_summary}.\n"
             "If the user asked a question or made a request, answer that first in one short sentence. "
-            "Then mention in a second short sentence that the todo was saved. "
+            "Then mention in a second short sentence that the to-do item or items were saved. "
             "Do not skip either part."
         )
     elif question_clause:
@@ -585,8 +656,8 @@ def generate_assistant_response(transcript, created_todo):
     )
     text = (response.text or "").strip()
     if not text:
-        return build_fallback_response(transcript, created_todo)
-    return ensure_todo_acknowledged(text, created_todo)
+        return build_fallback_response(transcript, created_todos)
+    return ensure_todo_acknowledged(text, created_todos)
 
 
 def dashboard_unauthorized():
@@ -733,9 +804,9 @@ def create_app():
 
         note_analysis = analyze_voice_note(transcript)
         summary = (payload.get("summary") or "").strip() or note_analysis["summary"]
-        created_todo = None
-        if should_accept_extracted_todo(transcript, note_analysis["todo_title"]):
-            created_todo = db.insert_todo(note_analysis["todo_title"])
+        created_todos = maybe_create_todos(transcript)
+        if not created_todos and should_accept_extracted_todo(transcript, note_analysis["todo_title"]):
+            created_todos = [db.insert_todo(note_analysis["todo_title"])]
 
         item = db.insert_note(
             transcript=transcript,
@@ -743,7 +814,17 @@ def create_app():
             audio_path=(payload.get("audio_path") or "").strip() or None,
             source=(payload.get("source") or "device").strip() or "device",
         )
-        return jsonify({"status": "created", "item": item, "created_todo": created_todo}), 201
+        return (
+            jsonify(
+                {
+                    "status": "created",
+                    "item": item,
+                    "created_todo": created_todos[0] if created_todos else None,
+                    "created_todos": created_todos,
+                }
+            ),
+            201,
+        )
 
     @app.post("/api/audio")
     @require_dashboard_auth
@@ -760,6 +841,7 @@ def create_app():
                     "status": "created",
                     "item": result["note"],
                     "created_todo": result["created_todo"],
+                    "created_todos": result["created_todos"],
                 }
             ),
             201,
@@ -902,15 +984,15 @@ def create_app():
                     try:
                         processed = process_audio_note(bytes(audio_buffer), source="device")
                         transcript = processed["transcript"]
-                        created_todo = processed["created_todo"]
+                        created_todos = processed["created_todos"]
                     except Exception as exc:
                         transcript = f"(transcription error: {exc})"
-                        created_todo = None
+                        created_todos = []
 
                     ws.send(f"T:{transcript}")
 
                     try:
-                        assistant_response = generate_assistant_response(transcript, created_todo)
+                        assistant_response = generate_assistant_response(transcript, created_todos)
                         status = "completed"
                     except Exception as exc:
                         assistant_response = f"Error generating response: {exc}"

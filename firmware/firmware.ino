@@ -30,8 +30,7 @@
 #define DEVICE_API_KEY "Cooperlee7"
 
 #define SAMPLE_RATE 16000
-#define MIC_READ_LEN 512
-#define WS_SEND_SAMPLES 2048
+#define MIC_BUF_LEN 1024
 #define STATE_REFRESH_MS 60000
 #define MAX_TODO_ITEMS 5
 #define MAX_WRAP_LINES 24
@@ -71,8 +70,6 @@ uint16_t tempStatusColor = WHITE;
 int transcriptScrollOffset = 0;
 int responseScrollOffset = 0;
 float micDcEstimate = 0.0f;
-int16_t micSendBuffer[WS_SEND_SAMPLES];
-size_t micSendCount = 0;
 
 const int SCREEN_W = 240;
 const int SCREEN_H = 135;
@@ -932,7 +929,6 @@ void loop() {
         stopRequested = false;
         stopRequestedAt = 0;
         micDcEstimate = 0.0f;
-        micSendCount = 0;
         lastTranscript = "";
         transcriptScrollOffset = 0;
         lastResponse = "Listening...";
@@ -952,32 +948,16 @@ void loop() {
   }
 
   if (assistantState == RECORDING) {
-    int16_t buffer[MIC_READ_LEN];
-    if (M5.Mic.record(buffer, MIC_READ_LEN, SAMPLE_RATE)) {
-      processMicBuffer(buffer, MIC_READ_LEN);
-
-      for (size_t i = 0; i < MIC_READ_LEN; i++) {
-        micSendBuffer[micSendCount++] = buffer[i];
-        if (micSendCount >= WS_SEND_SAMPLES) {
-          if (!ws.sendBIN((uint8_t *)micSendBuffer, micSendCount * sizeof(int16_t))) {
-            markSocketUnavailable("Audio upload failed");
-            micSendCount = 0;
-            return;
-          }
-          micSendCount = 0;
-        }
+    int16_t buffer[MIC_BUF_LEN];
+    if (M5.Mic.record(buffer, MIC_BUF_LEN, SAMPLE_RATE)) {
+      processMicBuffer(buffer, MIC_BUF_LEN);
+      if (!ws.sendBIN((uint8_t *)buffer, sizeof(buffer))) {
+        markSocketUnavailable("Audio upload failed");
+        return;
       }
     }
 
     if (stopRequested && millis() - stopRequestedAt >= STOP_TAIL_MS) {
-      if (micSendCount > 0) {
-        if (!ws.sendBIN((uint8_t *)micSendBuffer, micSendCount * sizeof(int16_t))) {
-          markSocketUnavailable("Audio upload failed");
-          micSendCount = 0;
-          return;
-        }
-        micSendCount = 0;
-      }
       if (!ws.sendTXT("stop")) {
         markSocketUnavailable("Stop upload failed");
         return;
