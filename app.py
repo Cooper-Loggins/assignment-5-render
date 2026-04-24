@@ -173,9 +173,10 @@ def analyze_voice_note(transcript):
     fallback = {
         "summary": local_summary(clean),
         "todo_title": None,
+        "todo_titles": [],
     }
 
-    if len(clean.split()) < 8:
+    if len(clean.split()) < 4:
         return fallback
 
     client = get_llm_client()
@@ -184,11 +185,10 @@ def analyze_voice_note(transcript):
 
     prompt = (
         "Analyze this voice note. Return strict JSON with exactly two keys: "
-        '"summary" and "todo_title". '
+        '"summary" and "todo_titles". '
         '"summary" must be a concise dashboard-ready summary under 90 characters. '
-        '"todo_title" must be either a short actionable todo title under 70 characters '
-        "or null if the note does not clearly imply a task. "
-        "Only return a todo_title for explicit user commitments, reminders, or clearly intended follow-up actions. "
+        '"todo_titles" must be an array of zero or more short actionable todo titles under 70 characters each. '
+        "Only return todo titles for explicit user commitments, reminders, or clearly intended follow-up actions. "
         "Do not create todos for questions, brainstorming, general information, requests for explanation, or test prompts.\n\n"
         f"Voice note:\n{clean}"
     )
@@ -209,15 +209,27 @@ def analyze_voice_note(transcript):
 
     parsed = extract_json_object((response.text or "").strip())
     summary = (parsed.get("summary") or "").strip()
-    todo_title = parsed.get("todo_title")
-    if isinstance(todo_title, str):
-        todo_title = todo_title.strip() or None
-    else:
-        todo_title = None
+    raw_todo_titles = parsed.get("todo_titles")
+    todo_titles = []
+    if isinstance(raw_todo_titles, list):
+        for item in raw_todo_titles:
+            if not isinstance(item, str):
+                continue
+            title = item.strip()
+            if title and title.lower() not in {existing.lower() for existing in todo_titles}:
+                todo_titles.append(title)
+
+    # Backward-compatible parsing if the model still returns the older key.
+    legacy_todo_title = parsed.get("todo_title")
+    if isinstance(legacy_todo_title, str):
+        title = legacy_todo_title.strip()
+        if title and title.lower() not in {existing.lower() for existing in todo_titles}:
+            todo_titles.append(title)
 
     return {
         "summary": summary or fallback["summary"],
-        "todo_title": todo_title,
+        "todo_title": todo_titles[0] if todo_titles else None,
+        "todo_titles": todo_titles,
     }
 
 
@@ -476,6 +488,60 @@ def split_todo_clause(title):
     return cleaned
 
 
+def is_valid_explicit_todo_title(title):
+    normalized = " ".join((title or "").strip().split()).strip(" .:,;!?")
+    lowered = normalized.lower()
+    if not lowered:
+        return False
+
+    invalid_titles = {
+        "today",
+        "tomorrow",
+        "later",
+        "right now",
+        "soon",
+        "this week",
+        "this weekend",
+        "tonight",
+        "multiple things",
+        "a few things",
+        "some things",
+        "things to do",
+    }
+    if lowered in invalid_titles:
+        return False
+
+    if lowered.startswith("do today"):
+        return False
+    if lowered.startswith("multiple things i need to"):
+        return False
+    if lowered.startswith("things i need to"):
+        return False
+
+    return True
+
+
+def extract_enumerated_todo_titles(transcript):
+    clean = " ".join((transcript or "").strip().split())
+    if not clean:
+        return []
+
+    pattern = re.compile(
+        r"(?:^|[.?!]\s+)(?:the\s+)?(?:first|second|third|fourth|fifth|next|last|\d+(?:st|nd|rd|th))\s+is\s+to\s+(.+?)(?=(?:[.?!]\s+(?:the\s+)?(?:first|second|third|fourth|fifth|next|last|\d+(?:st|nd|rd|th))\s+is\s+to\b)|[.?!]?$)",
+        re.IGNORECASE,
+    )
+
+    titles = []
+    seen = set()
+    for match in pattern.finditer(clean):
+        for title in split_todo_clause(match.group(1)):
+            lowered = title.lower()
+            if is_valid_explicit_todo_title(title) and lowered not in seen:
+                seen.add(lowered)
+                titles.append(title)
+    return titles
+
+
 def extract_explicit_todo_titles(transcript):
     clean = " ".join((transcript or "").strip().split())
     lowered = clean.lower()
@@ -513,8 +579,15 @@ def extract_explicit_todo_titles(transcript):
             title = title[:cut_at]
 
         for split_title in split_todo_clause(title):
-            if split_title and split_title.lower() not in {item["title"].lower() for item in titles}:
+            if (
+                is_valid_explicit_todo_title(split_title)
+                and split_title.lower() not in {item["title"].lower() for item in titles}
+            ):
                 titles.append({"title": split_title})
+
+    for title in extract_enumerated_todo_titles(clean):
+        if title.lower() not in {item["title"].lower() for item in titles}:
+            titles.append({"title": title})
 
     return [item["title"] for item in titles]
 
@@ -568,6 +641,19 @@ def maybe_create_todo(transcript):
 def maybe_create_todos(transcript):
     titles = extract_explicit_todo_titles(transcript)
     return [db.insert_todo(title) for title in titles]
+
+
+def merge_todo_titles(*groups):
+    merged = []
+    seen = set()
+    for group in groups:
+        for title in group or []:
+            normalized = " ".join((title or "").strip().split()).strip(" .:,;!?")
+            lowered = normalized.lower()
+            if normalized and lowered not in seen:
+                seen.add(lowered)
+                merged.append(normalized)
+    return merged
 
 
 def should_ignore_extracted_todo(transcript):
@@ -658,8 +744,6 @@ def should_accept_extracted_todo(transcript, todo_title):
 
     if lowered.startswith(tuple(explicit_todo_starts)):
         return True
-    if should_ignore_extracted_todo(transcript):
-        return False
 
     explicit_todo_markers = [
         " remember to ",
@@ -672,7 +756,21 @@ def should_accept_extracted_todo(transcript, todo_title):
         " do not let me forget to ",
     ]
     padded = f" {lowered} "
-    return any(marker in padded for marker in explicit_todo_markers)
+    if any(marker in padded for marker in explicit_todo_markers):
+        return True
+
+    if should_ignore_extracted_todo(transcript):
+        return False
+
+    return False
+
+
+def accepted_extracted_todo_titles(transcript, todo_titles):
+    accepted = []
+    for title in todo_titles or []:
+        if should_accept_extracted_todo(transcript, title):
+            accepted.append(title)
+    return merge_todo_titles(accepted)
 
 
 def build_fallback_response(transcript, created_todos):
@@ -752,13 +850,13 @@ def process_audio_note(audio_bytes, source="device"):
 
     note_analysis = analyze_voice_note(transcript)
     summary = note_analysis["summary"]
-    extracted_todo_title = note_analysis["todo_title"]
-    if not should_accept_extracted_todo(transcript, extracted_todo_title):
-        extracted_todo_title = None
-
-    created_todos = maybe_create_todos(transcript)
-    if not created_todos and extracted_todo_title:
-        created_todos = [db.insert_todo(extracted_todo_title)]
+    explicit_todo_titles = extract_explicit_todo_titles(transcript)
+    extracted_todo_titles = accepted_extracted_todo_titles(
+        transcript,
+        note_analysis.get("todo_titles") or [note_analysis.get("todo_title")],
+    )
+    todo_titles = merge_todo_titles(explicit_todo_titles, extracted_todo_titles)
+    created_todos = [db.insert_todo(title) for title in todo_titles]
 
     note = db.insert_note(
         transcript=transcript,
@@ -959,9 +1057,13 @@ def create_app():
 
         note_analysis = analyze_voice_note(transcript)
         summary = (payload.get("summary") or "").strip() or note_analysis["summary"]
-        created_todos = maybe_create_todos(transcript)
-        if not created_todos and should_accept_extracted_todo(transcript, note_analysis["todo_title"]):
-            created_todos = [db.insert_todo(note_analysis["todo_title"])]
+        explicit_todo_titles = extract_explicit_todo_titles(transcript)
+        extracted_todo_titles = accepted_extracted_todo_titles(
+            transcript,
+            note_analysis.get("todo_titles") or [note_analysis.get("todo_title")],
+        )
+        todo_titles = merge_todo_titles(explicit_todo_titles, extracted_todo_titles)
+        created_todos = [db.insert_todo(title) for title in todo_titles]
 
         item = db.insert_note(
             transcript=transcript,
