@@ -221,8 +221,8 @@ def analyze_voice_note(transcript):
     }
 
 
-def extract_explicit_todo_title(transcript):
-    clean = " ".join(transcript.strip().split())
+def find_explicit_todo_marker(transcript):
+    clean = " ".join((transcript or "").strip().split())
     lowered = clean.lower()
     markers = [
         "todo ",
@@ -257,6 +257,11 @@ def extract_explicit_todo_title(transcript):
             best_start = idx
             best_marker = marker
 
+    return clean, best_start, best_marker
+
+
+def extract_explicit_todo_title(transcript):
+    clean, best_start, best_marker = find_explicit_todo_marker(transcript)
     if best_start is None:
         return None
 
@@ -310,6 +315,40 @@ def extract_explicit_todo_title(transcript):
 
     title = title.strip(" .:,;!?")
     return title or None
+
+
+def extract_question_clause(transcript):
+    clean, todo_start, _marker = find_explicit_todo_marker(transcript)
+    if not transcript_has_question_intent(clean):
+        return None
+
+    question = clean
+    if todo_start is not None and todo_start > 0:
+        question = clean[:todo_start]
+
+    cleanup_suffixes = [
+        " and also later",
+        " and also",
+        " and then",
+        " and",
+        " but also",
+        " but",
+        " also",
+        ",",
+    ]
+    question = question.rstrip(" .:,;!?")
+    lowered = question.lower()
+    changed = True
+    while changed and question:
+        changed = False
+        for suffix in cleanup_suffixes:
+            if lowered.endswith(suffix):
+                question = question[: -len(suffix)].rstrip(" .:,;!?")
+                lowered = question.lower()
+                changed = True
+                break
+
+    return question or None
 
 
 def maybe_create_todo(transcript):
@@ -518,21 +557,22 @@ def generate_assistant_response(transcript, created_todo):
     if client is None:
         return build_fallback_response(transcript, created_todo)
 
+    question_clause = extract_question_clause(transcript)
     prompt = (
         f"User said: {transcript}\n"
         "Respond directly to the user's request."
     )
     if created_todo:
         prompt = (
-            f"User said: {transcript}\n"
+            f"User said: {question_clause or transcript}\n"
             f"A todo was already created with title: {created_todo['title']}.\n"
             "If the user asked a question or made a request, answer that first in one short sentence. "
             "Then mention in a second short sentence that the todo was saved. "
             "Do not skip either part."
         )
-    elif transcript_has_question_intent(transcript):
+    elif question_clause:
         prompt = (
-            f"User said: {transcript}\n"
+            f"User said: {question_clause}\n"
             "Answer the user's direct question or request briefly and clearly."
         )
 
