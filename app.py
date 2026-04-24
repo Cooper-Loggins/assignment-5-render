@@ -436,6 +436,49 @@ def build_fallback_response(transcript, created_todo):
     return "Saved your note."
 
 
+def transcript_has_question_intent(transcript):
+    clean = " ".join((transcript or "").strip().lower().split())
+    if not clean:
+        return False
+    if "?" in clean:
+        return True
+    question_starts = [
+        "what ",
+        "when ",
+        "where ",
+        "why ",
+        "who ",
+        "how ",
+        "can you ",
+        "could you ",
+        "would you ",
+        "will you ",
+        "is ",
+        "are ",
+        "do ",
+        "does ",
+        "did ",
+        "tell me ",
+        "show me ",
+        "explain ",
+    ]
+    return clean.startswith(tuple(question_starts))
+
+
+def ensure_todo_acknowledged(response_text, created_todo):
+    if not created_todo:
+        return response_text
+
+    clean = (response_text or "").strip()
+    title = created_todo["title"]
+    lowered = clean.lower()
+    if title.lower() in lowered or "to-do" in lowered or "todo" in lowered:
+        return clean
+
+    suffix = f" I also added this to your to-do list: {title}."
+    return (clean + suffix).strip() if clean else f"Added to your to-do list: {title}"
+
+
 def process_audio_note(audio_bytes, source="device"):
     audio_path = save_pcm_wav(audio_bytes, source=source)
 
@@ -483,8 +526,14 @@ def generate_assistant_response(transcript, created_todo):
         prompt = (
             f"User said: {transcript}\n"
             f"A todo was already created with title: {created_todo['title']}.\n"
-            "Answer any direct question or request in the user's message first. "
-            "Then briefly mention that the todo was saved."
+            "If the user asked a question or made a request, answer that first in one short sentence. "
+            "Then mention in a second short sentence that the todo was saved. "
+            "Do not skip either part."
+        )
+    elif transcript_has_question_intent(transcript):
+        prompt = (
+            f"User said: {transcript}\n"
+            "Answer the user's direct question or request briefly and clearly."
         )
 
     response = client.models.generate_content(
@@ -495,7 +544,9 @@ def generate_assistant_response(transcript, created_todo):
         ),
     )
     text = (response.text or "").strip()
-    return text or build_fallback_response(transcript, created_todo)
+    if not text:
+        return build_fallback_response(transcript, created_todo)
+    return ensure_todo_acknowledged(text, created_todo)
 
 
 def dashboard_unauthorized():
