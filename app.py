@@ -221,9 +221,10 @@ def analyze_voice_note(transcript):
     }
 
 
-def maybe_create_todo(transcript):
-    lowered = " ".join(transcript.lower().strip().split())
-    prefixes = [
+def extract_explicit_todo_title(transcript):
+    clean = " ".join(transcript.strip().split())
+    lowered = clean.lower()
+    markers = [
         "todo ",
         "todo:",
         "to do ",
@@ -237,14 +238,36 @@ def maybe_create_todo(transcript):
         "remember to ",
         "remind me to ",
         "i need to ",
+        "i should ",
+        "i have to ",
+        "i must ",
         "don't let me forget to ",
         "do not let me forget to ",
     ]
-    for prefix in prefixes:
-        if lowered.startswith(prefix):
-            title = transcript[len(prefix):].strip(" .:")
-            if title:
-                return db.insert_todo(title)
+
+    best_start = None
+    best_marker = None
+    for marker in markers:
+        idx = lowered.find(marker)
+        if idx == -1:
+            continue
+        if idx > 0 and lowered[idx - 1].isalnum():
+            continue
+        if best_start is None or idx < best_start:
+            best_start = idx
+            best_marker = marker
+
+    if best_start is None:
+        return None
+
+    title = clean[best_start + len(best_marker):].strip(" .:,;!?")
+    return title or None
+
+
+def maybe_create_todo(transcript):
+    title = extract_explicit_todo_title(transcript)
+    if title:
+        return db.insert_todo(title)
     return None
 
 
