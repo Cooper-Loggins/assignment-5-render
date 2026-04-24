@@ -16,6 +16,9 @@ import db
 
 SAMPLE_RATE = 16000
 MIN_AUDIO_BYTES = SAMPLE_RATE
+PCM_BYTES_PER_SECOND = SAMPLE_RATE * 2
+MAX_STT_CHUNK_SECONDS = 8
+MAX_STT_CHUNK_BYTES = PCM_BYTES_PER_SECOND * MAX_STT_CHUNK_SECONDS
 LLM_MODEL = "gemini-3.1-flash-lite-preview"
 SYSTEM_PROMPT = (
     "You are a helpful smart assistant for a small wearable screen. "
@@ -130,6 +133,17 @@ def transcribe_audio(audio_bytes):
     if not wit_token:
         return "(transcription unavailable: set WIT_TOKEN)"
 
+    chunks = [
+        audio_bytes[i : i + MAX_STT_CHUNK_BYTES]
+        for i in range(0, len(audio_bytes), MAX_STT_CHUNK_BYTES)
+        if audio_bytes[i : i + MAX_STT_CHUNK_BYTES]
+    ]
+    transcripts = [transcribe_audio_chunk(wit_token, chunk) for chunk in chunks]
+    merged = merge_transcript_segments(transcripts)
+    return merged or "(no speech detected)"
+
+
+def transcribe_audio_chunk(wit_token, audio_bytes):
     req = urllib.request.Request(
         "https://api.wit.ai/speech?v=20240101",
         data=audio_bytes,
@@ -141,7 +155,34 @@ def transcribe_audio(audio_bytes):
     with urllib.request.urlopen(req, timeout=30) as resp:
         body = resp.read().decode()
     result = parse_last_json(body)
-    return result.get("text", "").strip() or "(no speech detected)"
+    return result.get("text", "").strip()
+
+
+def merge_transcript_segments(segments):
+    merged = ""
+    for raw_segment in segments:
+        segment = " ".join((raw_segment or "").strip().split())
+        if not segment or segment == "(no speech detected)":
+            continue
+        if not merged:
+            merged = segment
+            continue
+
+        merged_words = merged.split()
+        segment_words = segment.split()
+        overlap = 0
+        max_overlap = min(len(merged_words), len(segment_words), 6)
+        for size in range(max_overlap, 0, -1):
+            if [word.lower() for word in merged_words[-size:]] == [word.lower() for word in segment_words[:size]]:
+                overlap = size
+                break
+
+        if overlap:
+            merged = " ".join(merged_words + segment_words[overlap:])
+        else:
+            merged = f"{merged} {segment}"
+
+    return merged.strip()
 
 
 def local_summary(text):
