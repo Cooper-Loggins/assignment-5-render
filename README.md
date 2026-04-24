@@ -38,10 +38,11 @@ Main implementation areas:
 
 ## Creative extension
 
-- Longer voice notes are analyzed with the LLM before storage
-- The backend generates a concise summary for the dashboard and device view
-- When a note clearly implies an action, the backend creates a short actionable to-do automatically
-- This turns voice notes into dashboard-ready tasks without requiring strict spoken prefixes
+- This project fulfills the creative extension requirement through GenAI-assisted note understanding.
+- Longer voice notes are analyzed with an LLM before storage.
+- The backend generates a concise summary for the dashboard and device view automatically.
+- When a note clearly implies an action, the backend creates a short actionable to-do automatically.
+- This directly extends the base assignment by turning longer spoken notes into concise, dashboard-ready tasks without requiring strict spoken prefixes such as `todo:`.
 
 ## Current dashboard behavior
 
@@ -124,8 +125,9 @@ Current M5Stick controls:
 
 Current creative extension:
 
-- the backend uses the LLM to summarize longer notes automatically
-- if a note implies a task, the backend creates a short actionable to-do automatically
+- the backend uses an LLM to summarize longer voice notes automatically
+- if a note implies a task, the backend converts that note into a short actionable to-do automatically
+- this is the GenAI-based extension that expands the base voice-note workflow into automatic task extraction
 
 Suggested demo flow:
 
