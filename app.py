@@ -188,8 +188,10 @@ def analyze_voice_note(transcript):
         '"summary" and "todo_titles". '
         '"summary" must be a concise dashboard-ready summary under 90 characters. '
         '"todo_titles" must be an array of zero or more short actionable todo titles under 70 characters each. '
-        "Only return todo titles for explicit user commitments, reminders, or clearly intended follow-up actions. "
-        "Do not create todos for questions, brainstorming, general information, requests for explanation, or test prompts.\n\n"
+        "Extract every distinct actionable task the user says, even if phrased naturally instead of using the word todo. "
+        "Split combined spoken lists into separate task titles. "
+        "Do not return meta phrases like 'things to do today' or time words by themselves. "
+        "Do not create todos for pure questions, brainstorming, general information, requests for explanation, or test prompts.\n\n"
         f"Voice note:\n{clean}"
     )
 
@@ -199,7 +201,8 @@ def analyze_voice_note(transcript):
             contents=prompt,
             config=genai.types.GenerateContentConfig(
                 system_instruction=(
-                    "You extract concise summaries and possible follow-up tasks from notes. "
+                    "You extract concise summaries and all distinct actionable tasks from notes. "
+                    "When the user mentions multiple tasks, return one short task title per task. "
                     "Always return valid JSON only."
                 ),
             ),
@@ -385,6 +388,8 @@ TODO_ACTION_STARTS = (
 )
 
 TODO_LIST_FILLERS = (
+    "and later ",
+    "later ",
     "and then ",
     "then ",
     "and also ",
@@ -420,6 +425,25 @@ def normalize_todo_fragment(text):
         if remainder and starts_with_todo_action(remainder):
             cleaned = remainder
 
+    trailing_fillers = (
+        " later",
+        " then",
+        " also",
+        " next",
+        " afterwards",
+        " after that",
+    )
+    lowered = cleaned.lower()
+    changed = True
+    while changed and cleaned:
+        changed = False
+        for filler in trailing_fillers:
+            if lowered.endswith(filler):
+                cleaned = cleaned[: -len(filler)].strip(" .:,;!?")
+                lowered = cleaned.lower()
+                changed = True
+                break
+
     return cleaned
 
 
@@ -438,6 +462,8 @@ def split_todo_fragment(text):
         return []
 
     candidate_markers = [
+        " then later ",
+        " and later ",
         " and then ",
         ", then ",
         " then ",
@@ -513,9 +539,13 @@ def is_valid_explicit_todo_title(title):
 
     if lowered.startswith("do today"):
         return False
+    if lowered.startswith("today the first is to"):
+        return False
     if lowered.startswith("multiple things i need to"):
         return False
     if lowered.startswith("things i need to"):
+        return False
+    if re.search(r"\b(first|second|third|fourth|fifth|\d+(?:st|nd|rd|th))\s+is\s+to\b", lowered):
         return False
 
     return True
@@ -527,7 +557,7 @@ def extract_enumerated_todo_titles(transcript):
         return []
 
     pattern = re.compile(
-        r"(?:^|[.?!]\s+)(?:the\s+)?(?:first|second|third|fourth|fifth|next|last|\d+(?:st|nd|rd|th))\s+is\s+to\s+(.+?)(?=(?:[.?!]\s+(?:the\s+)?(?:first|second|third|fourth|fifth|next|last|\d+(?:st|nd|rd|th))\s+is\s+to\b)|[.?!]?$)",
+        r"(?:^|.*?\b)(?:the\s+)?(?:first|second|third|fourth|fifth|next|last|\d+(?:st|nd|rd|th))\s+is\s+to\s+(.+?)(?=(?:\s+(?:the\s+)?(?:first|second|third|fourth|fifth|next|last|\d+(?:st|nd|rd|th))\s+is\s+to\b)|[.?!]?$)",
         re.IGNORECASE,
     )
 
@@ -765,12 +795,64 @@ def should_accept_extracted_todo(transcript, todo_title):
     return False
 
 
+def should_accept_llm_todo_title(transcript, todo_title):
+    normalized = " ".join((todo_title or "").strip().split()).strip(" .:,;!?")
+    lowered = normalized.lower()
+    transcript_lowered = " ".join((transcript or "").strip().lower().split())
+    if not normalized:
+        return False
+    if not is_valid_explicit_todo_title(normalized):
+        return False
+
+    rejected_titles = {
+        "task",
+        "tasks",
+        "to do",
+        "todo",
+        "to-do",
+        "reminder",
+        "reminders",
+        "plan",
+        "plans",
+        "today's tasks",
+        "things to do today",
+    }
+    if lowered in rejected_titles:
+        return False
+    if len(lowered) < 4:
+        return False
+
+    # Keep question-only utterances from turning into invented tasks.
+    if should_ignore_extracted_todo(transcript) and not should_accept_extracted_todo(transcript, normalized):
+        return False
+
+    # Require some lexical overlap so the model cannot invent unrelated work.
+    title_words = {word for word in re.findall(r"[a-z0-9']+", lowered) if len(word) > 2}
+    transcript_words = {word for word in re.findall(r"[a-z0-9']+", transcript_lowered) if len(word) > 2}
+    if title_words and transcript_words and not (title_words & transcript_words):
+        return False
+
+    return True
+
+
 def accepted_extracted_todo_titles(transcript, todo_titles):
     accepted = []
     for title in todo_titles or []:
-        if should_accept_extracted_todo(transcript, title):
+        if should_accept_llm_todo_title(transcript, title):
             accepted.append(title)
     return merge_todo_titles(accepted)
+
+
+def build_todo_titles_from_note(transcript, note_analysis):
+    llm_todo_titles = accepted_extracted_todo_titles(
+        transcript,
+        note_analysis.get("todo_titles") or [note_analysis.get("todo_title")],
+    )
+    if llm_todo_titles:
+        return llm_todo_titles
+
+    # Fallback only when the LLM is unavailable or returns nothing useful.
+    return extract_explicit_todo_titles(transcript)
 
 
 def build_fallback_response(transcript, created_todos):
@@ -850,12 +932,7 @@ def process_audio_note(audio_bytes, source="device"):
 
     note_analysis = analyze_voice_note(transcript)
     summary = note_analysis["summary"]
-    explicit_todo_titles = extract_explicit_todo_titles(transcript)
-    extracted_todo_titles = accepted_extracted_todo_titles(
-        transcript,
-        note_analysis.get("todo_titles") or [note_analysis.get("todo_title")],
-    )
-    todo_titles = merge_todo_titles(explicit_todo_titles, extracted_todo_titles)
+    todo_titles = build_todo_titles_from_note(transcript, note_analysis)
     created_todos = [db.insert_todo(title) for title in todo_titles]
 
     note = db.insert_note(
@@ -1057,12 +1134,7 @@ def create_app():
 
         note_analysis = analyze_voice_note(transcript)
         summary = (payload.get("summary") or "").strip() or note_analysis["summary"]
-        explicit_todo_titles = extract_explicit_todo_titles(transcript)
-        extracted_todo_titles = accepted_extracted_todo_titles(
-            transcript,
-            note_analysis.get("todo_titles") or [note_analysis.get("todo_title")],
-        )
-        todo_titles = merge_todo_titles(explicit_todo_titles, extracted_todo_titles)
+        todo_titles = build_todo_titles_from_note(transcript, note_analysis)
         created_todos = [db.insert_todo(title) for title in todo_titles]
 
         item = db.insert_note(
