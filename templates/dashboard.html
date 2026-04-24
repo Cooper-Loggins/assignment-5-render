@@ -793,6 +793,13 @@
             el.className = `flash ${kind}`.trim();
         }
 
+        function normalizeNoteText(value) {
+            return String(value || "")
+                .trim()
+                .replace(/\s+/g, " ")
+                .toLowerCase();
+        }
+
         async function apiGet(url) {
             const response = await fetch(url);
             if (!response.ok) {
@@ -931,31 +938,51 @@
 
             const visibleNotes = state.notesExpanded ? state.notes : state.notes.slice(0, 5);
 
-            root.innerHTML = visibleNotes.map((item) => `
-                <article class="item note-item">
-                    <div class="item-top">
-                        <div class="pill ok">${escapeHtml(item.source || "device")}</div>
-                        <div class="mini">${escapeHtml(formatDate(item.created_at))}</div>
-                    </div>
-                    <div class="item-block">
-                        <div class="item-meta">Summary</div>
-                        <div class="item-title">${escapeHtml(item.summary || "No summary stored")}</div>
-                    </div>
-                    <div class="item-block">
-                        <div class="item-meta">Transcript</div>
-                        <div class="item-title">${escapeHtml(item.transcript)}</div>
-                    </div>
-                    ${item.audio_path ? `
-                        <div class="item-block">
-                            <div class="item-meta">Raw Audio</div>
-                            <audio class="audio-player" controls preload="none" src="/api/notes/${item.id}/audio"></audio>
+            root.innerHTML = visibleNotes.map((item) => {
+                const hasTranscript = normalizeNoteText(item.transcript).length > 0;
+
+                return `
+                    <article class="item note-item">
+                        <div class="item-top">
+                            <div class="pill ok">${escapeHtml(item.source || "device")}</div>
+                            <div class="mini">${escapeHtml(formatDate(item.created_at))}</div>
                         </div>
-                    ` : ""}
-                    <div class="item-actions">
-                        <button class="danger inline-btn" type="button" data-delete-note-id="${item.id}">Delete Note</button>
-                    </div>
-                </article>
-            `).join("");
+                        <div class="item-block">
+                            <div class="item-meta">Summary</div>
+                            <div class="item-title">${escapeHtml(item.summary || "No summary stored")}</div>
+                        </div>
+                        ${hasTranscript ? `
+                            <div class="item-actions">
+                                <button class="ghost inline-btn" type="button" data-toggle-note-id="${item.id}">Show Transcript</button>
+                            </div>
+                            <div class="item-block" data-note-transcript-id="${item.id}" hidden>
+                                <div class="item-meta">Transcript</div>
+                                <div class="item-title">${escapeHtml(item.transcript)}</div>
+                            </div>
+                        ` : ""}
+                        ${item.audio_path ? `
+                            <div class="item-block">
+                                <div class="item-meta">Raw Audio</div>
+                                <audio class="audio-player" controls preload="none" src="/api/notes/${item.id}/audio"></audio>
+                            </div>
+                        ` : ""}
+                        <div class="item-actions">
+                            <button class="danger inline-btn" type="button" data-delete-note-id="${item.id}">Delete Note</button>
+                        </div>
+                    </article>
+                `;
+            }).join("");
+
+            root.querySelectorAll("[data-toggle-note-id]").forEach((button) => {
+                button.addEventListener("click", () => {
+                    const noteId = button.getAttribute("data-toggle-note-id");
+                    const transcriptBlock = root.querySelector(`[data-note-transcript-id="${noteId}"]`);
+                    if (!transcriptBlock) return;
+                    const nextHidden = !transcriptBlock.hidden;
+                    transcriptBlock.hidden = nextHidden;
+                    button.textContent = nextHidden ? "Show Transcript" : "Hide Transcript";
+                });
+            });
 
             root.querySelectorAll("[data-delete-note-id]").forEach((button) => {
                 button.addEventListener("click", async () => {

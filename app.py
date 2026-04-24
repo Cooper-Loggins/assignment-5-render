@@ -245,6 +245,33 @@ def maybe_create_todo(transcript):
     return None
 
 
+def should_ignore_extracted_todo(transcript):
+    lowered = " ".join(transcript.lower().strip().split())
+    ignored_prefixes = [
+        "give me ",
+        "tell me ",
+        "show me ",
+        "explain ",
+        "list ",
+        "generate ",
+        "write ",
+    ]
+    ignored_phrases = [
+        "so i can test",
+        "for testing",
+        "to test",
+        "test the assistant",
+        "test this",
+        "example text",
+        "dummy text",
+        "sample text",
+        "long list of text",
+    ]
+    return lowered.startswith(tuple(ignored_prefixes)) or any(
+        phrase in lowered for phrase in ignored_phrases
+    )
+
+
 def build_fallback_response(transcript, created_todo):
     if created_todo:
         return f"Added to your to-do list: {created_todo['title']}"
@@ -268,6 +295,8 @@ def process_audio_note(audio_bytes, source="device"):
     note_analysis = analyze_voice_note(transcript)
     summary = note_analysis["summary"]
     extracted_todo_title = note_analysis["todo_title"]
+    if extracted_todo_title and should_ignore_extracted_todo(transcript):
+        extracted_todo_title = None
 
     created_todo = maybe_create_todo(transcript)
     if created_todo is None and extracted_todo_title:

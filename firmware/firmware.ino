@@ -33,6 +33,7 @@
 #define MIC_BUF_LEN 256
 #define STATE_REFRESH_MS 60000
 #define MAX_TODO_ITEMS 5
+#define MAX_WRAP_LINES 24
 
 WebSocketsClient ws;
 Preferences prefs;
@@ -53,6 +54,8 @@ String lastTranscript = "";
 String lastResponse = "Press A to record";
 String deviceMode = "todo";
 String tempStatusMessage = "";
+String transcriptDisplayLines[MAX_WRAP_LINES];
+String responseDisplayLines[MAX_WRAP_LINES];
 
 bool firstResponseChunk = true;
 unsigned long lastStateRefresh = 0;
@@ -61,6 +64,8 @@ bool btnAHoldHandled = false;
 float dcEstimate = 0.0f;
 unsigned long tempStatusUntil = 0;
 uint16_t tempStatusColor = WHITE;
+int transcriptScrollOffset = 0;
+int responseScrollOffset = 0;
 
 const int SCREEN_W = 240;
 const int SCREEN_H = 135;
@@ -71,6 +76,8 @@ const int BODY_W = 228;
 const int LINE_H = 11;
 const int TODO_SECTION_BOTTOM = BODY_Y + 64;
 const int TODO_VISIBLE_ITEMS = 2;
+const int RESPONSE_TRANSCRIPT_VISIBLE_LINES = 2;
+const int RESPONSE_ASSISTANT_VISIBLE_LINES = 3;
 
 String decodeJsonString(String value) {
   value.replace("\\n", "\n");
@@ -296,6 +303,68 @@ int drawWrappedText(const String &rawText, int x, int y, int maxWidth, int maxLi
   return y + (line * LINE_H);
 }
 
+int buildWrappedLines(const String &rawText, int maxWidth, String lines[], int maxLines) {
+  String text = sanitizeDisplayText(rawText);
+  if (text.isEmpty()) {
+    return 0;
+  }
+
+  const int maxChars = maxWidth / 6;
+  int start = 0;
+  int lineCount = 0;
+
+  while (start < text.length() && lineCount < maxLines) {
+    int remaining = text.length() - start;
+    int take = remaining;
+
+    if (take > maxChars) {
+      take = maxChars;
+      int split = text.lastIndexOf(' ', start + take - 1);
+      if (split > start) {
+        take = split - start;
+      }
+    }
+
+    String part = text.substring(start, start + take);
+    part.trim();
+    lines[lineCount++] = part;
+    start += take;
+
+    while (start < text.length() && text[start] == ' ') {
+      start++;
+    }
+  }
+
+  return lineCount;
+}
+
+int drawWrappedTextWindow(
+  const String &rawText,
+  String lines[],
+  int x,
+  int y,
+  int maxWidth,
+  int startLine,
+  int visibleLines
+) {
+  int lineCount = buildWrappedLines(rawText, maxWidth, lines, MAX_WRAP_LINES);
+  if (lineCount == 0) {
+    return 0;
+  }
+
+  int maxStartLine = max(0, lineCount - visibleLines);
+  int clampedStart = constrain(startLine, 0, maxStartLine);
+  int drawn = 0;
+
+  for (int i = clampedStart; i < lineCount && drawn < visibleLines; i++) {
+    M5.Display.setCursor(x, y + (drawn * LINE_H));
+    M5.Display.println(lines[i]);
+    drawn++;
+  }
+
+  return lineCount;
+}
+
 void drawDivider(int y) {
   M5.Display.drawFastHLine(BODY_X, y, BODY_W, DARKGREY);
 }
@@ -347,6 +416,7 @@ void renderTodoMode() {
     if (selectedTodoIndex >= todoCount) {
       selectedTodoIndex = 0;
     }
+    const int todoHintY = TODO_SECTION_BOTTOM - LINE_H;
 
     int startIndex = selectedTodoIndex;
     if (todoCount > TODO_VISIBLE_ITEMS) {
@@ -366,8 +436,8 @@ void renderTodoMode() {
         linesNeeded = 2;
       }
       int nextY = y + (linesNeeded * LINE_H) + 1;
-      if (nextY > TODO_SECTION_BOTTOM) {
-        M5.Display.setCursor(BODY_X, TODO_SECTION_BOTTOM - LINE_H);
+      if (nextY > todoHintY) {
+        M5.Display.setCursor(BODY_X, todoHintY);
         M5.Display.setTextColor(ORANGE, BLACK);
         M5.Display.println("...more items below");
         M5.Display.setTextColor(WHITE, BLACK);
@@ -378,7 +448,7 @@ void renderTodoMode() {
     }
 
     if (todoCount > TODO_VISIBLE_ITEMS) {
-      M5.Display.setCursor(BODY_X, TODO_SECTION_BOTTOM - LINE_H);
+      M5.Display.setCursor(BODY_X, todoHintY);
       M5.Display.setTextColor(ORANGE, BLACK);
       if (selectedTodoIndex < todoCount - 1) {
         M5.Display.println("keep scrolling");
@@ -432,7 +502,7 @@ void renderResponseMode() {
   if (assistantState == RECORDING) {
     M5.Display.println("A stop   B cancel");
   } else {
-    M5.Display.println("A rec  hold A todo");
+    M5.Display.println("A rec  B next");
   }
   drawDivider(BODY_Y + 10);
 
@@ -442,7 +512,23 @@ void renderResponseMode() {
   M5.Display.println("YOU SAID");
   M5.Display.setTextColor(WHITE, BLACK);
   y += LINE_H + 1;
-  drawWrappedText(lastTranscript.length() ? lastTranscript : "(waiting)", BODY_X, y, BODY_W, 3);
+  int transcriptLines = drawWrappedTextWindow(
+    lastTranscript.length() ? lastTranscript : "(waiting)",
+    transcriptDisplayLines,
+    BODY_X,
+    y,
+    BODY_W,
+    transcriptScrollOffset,
+    RESPONSE_TRANSCRIPT_VISIBLE_LINES
+  );
+  int maxTranscriptOffset = max(0, transcriptLines - RESPONSE_TRANSCRIPT_VISIBLE_LINES);
+  transcriptScrollOffset = constrain(transcriptScrollOffset, 0, maxTranscriptOffset);
+  if (maxTranscriptOffset > 0) {
+    M5.Display.setCursor(BODY_X + 176, BODY_Y + 16);
+    M5.Display.setTextColor(ORANGE, BLACK);
+    M5.Display.print(String(transcriptScrollOffset + 1) + "/" + String(maxTranscriptOffset + 1));
+    M5.Display.setTextColor(WHITE, BLACK);
+  }
 
   drawDivider(BODY_Y + 54);
   y = BODY_Y + 60;
@@ -456,7 +542,23 @@ void renderResponseMode() {
   }
   M5.Display.setTextColor(WHITE, BLACK);
   y += LINE_H + 1;
-  drawWrappedText(hasTemporaryStatus() ? tempStatusMessage : lastResponse, BODY_X, y, BODY_W, 4);
+  int responseLines = drawWrappedTextWindow(
+    hasTemporaryStatus() ? tempStatusMessage : lastResponse,
+    responseDisplayLines,
+    BODY_X,
+    y,
+    BODY_W,
+    responseScrollOffset,
+    RESPONSE_ASSISTANT_VISIBLE_LINES
+  );
+  int maxResponseOffset = max(0, responseLines - RESPONSE_ASSISTANT_VISIBLE_LINES);
+  responseScrollOffset = constrain(responseScrollOffset, 0, maxResponseOffset);
+  if (maxResponseOffset > 0) {
+    M5.Display.setCursor(BODY_X, BODY_Y + 104);
+    M5.Display.setTextColor(ORANGE, BLACK);
+    M5.Display.print("B wraps through long text");
+    M5.Display.setTextColor(WHITE, BLACK);
+  }
 }
 
 void renderScreen() {
@@ -527,6 +629,53 @@ void selectNextTodo() {
   renderScreen();
 }
 
+void scrollResponseView(int delta) {
+  bool changed = false;
+
+  int transcriptLines = buildWrappedLines(
+    lastTranscript.length() ? lastTranscript : "(waiting)",
+    BODY_W,
+    transcriptDisplayLines,
+    MAX_WRAP_LINES
+  );
+  int responseLines = buildWrappedLines(
+    hasTemporaryStatus() ? tempStatusMessage : lastResponse,
+    BODY_W,
+    responseDisplayLines,
+    MAX_WRAP_LINES
+  );
+
+  int maxTranscriptOffset = max(0, transcriptLines - RESPONSE_TRANSCRIPT_VISIBLE_LINES);
+  int maxResponseOffset = max(0, responseLines - RESPONSE_ASSISTANT_VISIBLE_LINES);
+
+  int nextTranscriptOffset = transcriptScrollOffset;
+  int nextResponseOffset = responseScrollOffset;
+
+  if (delta > 0 && maxTranscriptOffset > 0) {
+    nextTranscriptOffset = (transcriptScrollOffset >= maxTranscriptOffset)
+      ? 0
+      : transcriptScrollOffset + 1;
+  }
+  if (delta > 0 && maxResponseOffset > 0) {
+    nextResponseOffset = (responseScrollOffset >= maxResponseOffset)
+      ? 0
+      : responseScrollOffset + 1;
+  }
+
+  if (nextTranscriptOffset != transcriptScrollOffset) {
+    transcriptScrollOffset = nextTranscriptOffset;
+    changed = true;
+  }
+  if (nextResponseOffset != responseScrollOffset) {
+    responseScrollOffset = nextResponseOffset;
+    changed = true;
+  }
+
+  if (changed) {
+    renderScreen();
+  }
+}
+
 void processMicBuffer(int16_t *buffer, size_t sampleCount) {
   for (size_t i = 0; i < sampleCount; i++) {
     float raw = static_cast<float>(buffer[i]);
@@ -595,6 +744,8 @@ void onWebSocket(WStype_t type, uint8_t *payload, size_t length) {
     case WStype_CONNECTED:
       assistantState = READY;
       lastResponse = "Ready for notes";
+      transcriptScrollOffset = 0;
+      responseScrollOffset = 0;
       setTemporaryStatus("Connected", GREEN, 1500);
       renderScreen();
       break;
@@ -605,11 +756,14 @@ void onWebSocket(WStype_t type, uint8_t *payload, size_t length) {
       if (msg.startsWith("T:")) {
         assistantState = PROCESSING;
         lastTranscript = msg.substring(2);
+        transcriptScrollOffset = 0;
         lastResponse = "";
+        responseScrollOffset = 0;
         firstResponseChunk = true;
       } else if (msg.startsWith("R:")) {
         if (firstResponseChunk) {
           lastResponse = "";
+          responseScrollOffset = 0;
           firstResponseChunk = false;
         }
         lastResponse += msg.substring(2);
@@ -701,6 +855,7 @@ void loop() {
       assistantState = READY;
       ws.sendTXT("cancel");
       lastResponse = "Recording canceled.";
+      responseScrollOffset = 0;
       setTemporaryStatus("Canceled", YELLOW, 1800);
       renderScreen();
     } else if (
@@ -710,6 +865,13 @@ void loop() {
       !btnBHoldHandled
     ) {
       selectNextTodo();
+    } else if (
+      screenMode == MODE_RESPONSE &&
+      assistantState != RECORDING &&
+      assistantState != PROCESSING &&
+      !btnBHoldHandled
+    ) {
+      scrollResponseView(1);
     } else {
       renderScreen();
     }
@@ -727,7 +889,9 @@ void loop() {
       screenMode = MODE_RESPONSE;
       firstResponseChunk = true;
       lastTranscript = "";
+      transcriptScrollOffset = 0;
       lastResponse = "Listening...";
+      responseScrollOffset = 0;
       dcEstimate = 0.0f;
       setTemporaryStatus("Recording...", RED, 2000);
       ws.sendTXT("start");
