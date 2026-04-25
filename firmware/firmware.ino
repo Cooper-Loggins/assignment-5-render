@@ -32,6 +32,7 @@
 #define SAMPLE_RATE 16000
 #define MIC_BUF_LEN 512
 #define STATE_REFRESH_MS 60000
+#define WIFI_RECONNECT_INTERVAL_MS 5000
 #define MAX_TODO_ITEMS 5
 #define MAX_WRAP_LINES 24
 #define STOP_TAIL_MS 900
@@ -219,7 +220,9 @@ bool connectWiFi() {
     }
 
     WiFi.mode(WIFI_STA);
-    WiFi.disconnect();
+    WiFi.setSleep(false);
+    WiFi.setAutoReconnect(true);
+    WiFi.persistent(false);
 
     if (user.length() > 0) {
       WiFi.begin(ssid.c_str(), WPA2_AUTH_PEAP, user.c_str(), user.c_str(), pass.c_str());
@@ -665,28 +668,8 @@ void scrollResponseView(int delta) {
 }
 
 void processMicBuffer(int16_t *buffer, size_t sampleCount) {
-  for (size_t i = 0; i < sampleCount; i++) {
-    float sample = static_cast<float>(buffer[i]);
-
-    // Remove slow DC drift but otherwise preserve the raw speech waveform.
-    micDcEstimate = (micDcEstimate * 0.995f) + (sample * 0.005f);
-    float centered = sample - micDcEstimate;
-
-    // Apply a very gentle limiter only near the extremes to avoid hard clipping.
-    if (centered > 28000.0f) {
-      centered = 28000.0f + ((centered - 28000.0f) * 0.2f);
-    } else if (centered < -28000.0f) {
-      centered = -28000.0f + ((centered + 28000.0f) * 0.2f);
-    }
-
-    if (centered > 32767.0f) {
-      centered = 32767.0f;
-    } else if (centered < -32768.0f) {
-      centered = -32768.0f;
-    }
-
-    buffer[i] = static_cast<int16_t>(centered);
-  }
+  (void)buffer;
+  (void)sampleCount;
 }
 
 void completeSelectedTodo() {
@@ -775,7 +758,6 @@ void onWebSocket(WStype_t type, uint8_t *payload, size_t length) {
         assistantState = READY;
         fetchDeviceState();
       }
-
       renderScreen();
       break;
     }
@@ -822,7 +804,6 @@ void setup() {
   wifiWasConnected = true;
   M5.Speaker.end();
   M5.Mic.begin();
-
   connectAssistantSocket();
 
   fetchDeviceState();
@@ -922,20 +903,21 @@ void loop() {
     } else if (assistantState == READY) {
       if (!ws.sendTXT("start")) {
         markSocketUnavailable("Socket start failed");
-      } else {
-        assistantState = RECORDING;
-        screenMode = MODE_RESPONSE;
-        firstResponseChunk = true;
-        stopRequested = false;
-        stopRequestedAt = 0;
-        micDcEstimate = 0.0f;
-        lastTranscript = "";
-        transcriptScrollOffset = 0;
-        lastResponse = "Listening...";
-        responseScrollOffset = 0;
-        setTemporaryStatus("Recording...", RED, 2000);
         renderScreen();
+        return;
       }
+      assistantState = RECORDING;
+      screenMode = MODE_RESPONSE;
+      firstResponseChunk = true;
+      stopRequested = false;
+      stopRequestedAt = 0;
+      micDcEstimate = 0.0f;
+      lastTranscript = "";
+      transcriptScrollOffset = 0;
+      lastResponse = "Listening...";
+      responseScrollOffset = 0;
+      setTemporaryStatus("Recording...", RED, 2000);
+      renderScreen();
     } else if (assistantState == DISCONNECTED) {
       setTemporaryStatus("Wait for server reconnect", YELLOW, 2200);
       renderScreen();
@@ -960,6 +942,7 @@ void loop() {
     if (stopRequested && millis() - stopRequestedAt >= STOP_TAIL_MS) {
       if (!ws.sendTXT("stop")) {
         markSocketUnavailable("Stop upload failed");
+        renderScreen();
         return;
       }
       assistantState = PROCESSING;

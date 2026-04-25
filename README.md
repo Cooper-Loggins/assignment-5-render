@@ -13,22 +13,22 @@
 ---
 
 ## 🎥 Video Demonstration
-Link to Assignment 5 Video: Add your final YouTube link here
-> *Note: The video link is the only remaining placeholder in this README. Everything else below reflects the current implementation in this repository.*
+Link to Assignment 5 Video: https://www.youtube.com/watch?v=_0pzXDyWn6o
+> *Note: This demo video is intended to satisfy the assignment requirement for a public video under 4 minutes with voiceover.*
 
 ---
 
 ## 🚀 Project Description
-> This project is a smart voice assistant built around an M5StickC Plus 2, a Flask backend, and a cloud-hosted web dashboard. The wearable device connects to Wi-Fi, opens a secure WebSocket to the backend, records microphone audio, and streams raw 16 kHz PCM audio to the server during a live assistant session. After the server finishes processing the recording, it returns a transcript and a short assistant reply that fit on the small M5 display. The firmware also polls a compact HTTPS endpoint so the device can show a to-do preview mode and allow the user to cycle through tasks or mark them complete directly from the wearable.
+> This project is a smart voice assistant built around an M5StickC Plus 2, a Flask backend, and a cloud-hosted web dashboard. The wearable device connects to Wi-Fi, opens a secure WebSocket to the backend, records microphone audio, and streams raw 16 kHz PCM audio to the server during an assistant session. After the server finishes processing the recording, it returns a transcript and a short assistant reply that fit on the small M5 display. The firmware also polls a compact HTTPS endpoint so the device can show a to-do preview mode and allow the user to cycle through tasks or mark them complete directly from the wearable.
 >
-> On the backend, Flask serves both the HTML dashboard and the JSON API routes, while Flask-Sock handles the live WebSocket assistant connection. The application stores all persistent data in SQLite. There are three main tables: `todos`, `notes`, and `interactions`. `todos` stores task titles and completion state, `notes` stores the original transcript, summary, source, and optional saved audio path, and `interactions` stores the transcript/assistant-response history for the live assistant channel.
+> On the backend, Flask serves both the HTML dashboard and the JSON API routes, while Flask-Sock handles the live WebSocket assistant connection used by the current firmware. The application stores all persistent data in SQLite. There are three main tables: `todos`, `notes`, and `interactions`. `todos` stores task titles and completion state, `notes` stores the original transcript, summary, source, and optional saved audio path, and `interactions` stores the transcript/assistant-response history for live assistant sessions.
 >
 > For speech processing, the server sends the uploaded raw PCM stream to Wit.ai when `WIT_TOKEN` is configured. After transcription, the backend stores the note and optionally runs an additional GenAI analysis step using `google-genai` with the `gemini-3.1-flash-lite-preview` model. That step creates a concise summary for the dashboard and may extract actionable to-do items from explicit task language in the transcript. The dashboard itself is a single-page Flask-rendered interface that lets the user add, edit, complete, delete, and clear to-dos; create and delete notes; upload WAV files for transcription; play back saved note audio; inspect recent interaction history; and view the compact device state returned to the M5.
 
 ---
 
 ## ☁️ Cloud Deployment & Security Architecture
-> The project is deployed as a single Python web service on Render using `gunicorn` as the production server. The included `render.yaml` config provisions the web service, sets the health check path to `/healthz`, installs dependencies from `requirements.txt`, and starts the Flask app with a threaded Gunicorn worker. The same deployed application serves the dashboard HTML, all JSON APIs, the note audio playback route, and the `/ws/assistant` secure WebSocket endpoint used by the M5Stick.
+> The project is deployed as a single Python web service on Render using `gunicorn` as the production server. The included `render.yaml` config provisions the web service, sets the health check path to `/healthz`, installs dependencies from `requirements.txt`, and starts the Flask app with a threaded Gunicorn worker. The same deployed application serves the dashboard HTML, all JSON APIs, the note audio playback route, the compact device-state endpoints, and the `/ws/assistant` secure WebSocket endpoint used by the M5Stick.
 >
 > Persistent storage is handled with SQLite on a mounted Render disk. In production, `DATABASE_PATH` points to `/opt/render/project/src/data/assignment5.db`, which allows notes, to-dos, audio metadata, and interaction history to survive deploys and restarts. The app also stores note audio files in a `media/audio` folder rooted beside the active database path, so audio uploads and device recordings stay associated with the persistent storage location.
 >
@@ -119,13 +119,14 @@ DATABASE_PATH=assignment5.db
 - `POST /api/interactions/clear`
 - `GET /api/device/state`
 - `POST /api/device/todos/<id>/complete`
+- `POST /api/device/audio` (implemented in the backend as an alternate device upload route)
 - `WS /ws/assistant`
 
 **Local development notes:**  
 
 - If `WIT_TOKEN` is missing, transcription does not fail catastrophically, but the server returns a placeholder message indicating that transcription is unavailable.
 - If `VERTEX_API_KEY` is missing, the assistant still works, but the GenAI summary/task extraction extension falls back to a shorter local summary path.
-- Only WAV uploads are accepted by the dashboard upload route, and uploaded WAV files must be 16-bit mono at 16000 Hz to match the backend expectations.
+- The dashboard upload route expects a multipart form upload with a file field named `audio`. WAV uploads must be 16-bit mono at 16000 Hz to match the backend expectations.
 - The dashboard requires Basic Auth even locally, so use the username/password defined in `.env`.
 
 **M5 firmware setup for local or production testing:**  
@@ -139,7 +140,7 @@ DATABASE_PATH=assignment5.db
    - `COMPLETE_TODO_URL_BASE`
    - `DEVICE_API_KEY`
 5. Reflash `firmware.ino`.
-6. On the live deployment, the firmware uses HTTPS/WSS on port `443`.
+6. On the live deployment, the firmware uses HTTPS for REST endpoints and WSS on port `443` for the assistant stream.
 
 **Current M5 controls:**  
 
