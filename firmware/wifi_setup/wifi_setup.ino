@@ -4,10 +4,10 @@
 
 Preferences prefs;
 
-// Temporary local Wi-Fi credentials. Remove these again before submission.
-const char* WIFI_SSID = "WhiteSky-TheConnectionAthens";
+// Enter local Wi-Fi credentials before flashing this setup sketch.
+const char* WIFI_SSID = "";
 const char* WIFI_USERNAME = "";
-const char* WIFI_PASSWORD = "GoDawgs255";
+const char* WIFI_PASSWORD = "";
 
 void showMessage(const char* line1, const char* line2 = "", const char* line3 = "", uint16_t color = WHITE) {
   M5.Display.fillScreen(BLACK);
