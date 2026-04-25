@@ -26,7 +26,6 @@
 #define WS_PATH "/ws/assistant?api_key=" DEVICE_API_KEY
 #define DEVICE_STATE_URL "https://assignment-5-dashboard.onrender.com/api/device/state"
 #define COMPLETE_TODO_URL_BASE "https://assignment-5-dashboard.onrender.com/api/device/todos/"
-// TODO before submission: replace this hard-coded test key with your final device API key.
 #define DEVICE_API_KEY "Cooperlee7"
 
 #define SAMPLE_RATE 16000
@@ -39,7 +38,6 @@
 
 WebSocketsClient ws;
 Preferences prefs;
-String wsExtraHeaders;
 bool wifiWasConnected = false;
 
 enum AssistantState { DISCONNECTED, READY, RECORDING, PROCESSING };
@@ -70,7 +68,6 @@ unsigned long tempStatusUntil = 0;
 uint16_t tempStatusColor = WHITE;
 int transcriptScrollOffset = 0;
 int responseScrollOffset = 0;
-float micDcEstimate = 0.0f;
 
 const int SCREEN_W = 240;
 const int SCREEN_H = 135;
@@ -668,6 +665,7 @@ void scrollResponseView(int delta) {
 }
 
 void processMicBuffer(int16_t *buffer, size_t sampleCount) {
+  // Audio is streamed as captured; keep the hook so light preprocessing can be restored later.
   (void)buffer;
   (void)sampleCount;
 }
@@ -911,7 +909,6 @@ void loop() {
       firstResponseChunk = true;
       stopRequested = false;
       stopRequestedAt = 0;
-      micDcEstimate = 0.0f;
       lastTranscript = "";
       transcriptScrollOffset = 0;
       lastResponse = "Listening...";
