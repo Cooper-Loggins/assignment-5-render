@@ -1461,6 +1461,49 @@ def create_app():
             return jsonify({"status": "error", "message": "todo not found"}), 404
         return jsonify({"status": "ok", "item": item})
 
+    @app.post("/api/device/audio")
+    def upload_device_audio():
+        if not device_api_key_is_valid():
+            return device_unauthorized()
+
+        audio_bytes = request.get_data(cache=False, as_text=False) or b""
+        if len(audio_bytes) < MIN_AUDIO_BYTES:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": "audio too short",
+                        "transcript": "(too short)",
+                        "assistant_response": "Hold the button a little longer and try again.",
+                    }
+                ),
+                400,
+            )
+
+        try:
+            processed = process_audio_note(audio_bytes, source="device")
+            transcript = processed["transcript"]
+            created_todos = processed["created_todos"]
+        except Exception as exc:
+            transcript = f"(transcription error: {exc})"
+            created_todos = []
+
+        try:
+            assistant_response = generate_assistant_response(transcript, created_todos)
+            status = "ok"
+        except Exception as exc:
+            assistant_response = f"Error generating response: {exc}"
+            status = "error"
+
+        return jsonify(
+            {
+                "status": status,
+                "transcript": transcript,
+                "assistant_response": assistant_response,
+                "created_todos": created_todos,
+            }
+        )
+
     @sock.route("/ws/assistant")
     def assistant_socket(ws):
         if not device_api_key_is_valid():
