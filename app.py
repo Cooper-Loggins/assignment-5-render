@@ -1386,6 +1386,20 @@ def create_app():
             return jsonify({"status": "error", "message": "audio file missing"}), 404
         return send_file(full_path, mimetype="audio/wav", conditional=True)
 
+    @app.post("/api/notes/<int:note_id>/edit")
+    @require_dashboard_auth
+    def edit_note(note_id):
+        payload = request.get_json(silent=True) or {}
+        transcript = (payload.get("transcript") or "").strip()
+        summary = (payload.get("summary") or "").strip() or None
+        if not transcript:
+            return jsonify({"status": "error", "message": "transcript is required"}), 400
+
+        item = db.update_note(note_id, transcript=transcript, summary=summary)
+        if item is None:
+            return jsonify({"status": "error", "message": "note not found"}), 404
+        return jsonify({"status": "ok", "item": item})
+
     @app.post("/api/notes/<int:note_id>/delete")
     @require_dashboard_auth
     def delete_note(note_id):

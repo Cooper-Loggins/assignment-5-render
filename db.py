@@ -195,6 +195,20 @@ def delete_note(note_id):
     return existing
 
 
+def update_note(note_id, transcript, summary=None):
+    db = get_db()
+    db.execute(
+        """
+        UPDATE notes
+        SET transcript = ?, summary = ?
+        WHERE id = ?
+        """,
+        (transcript, summary, note_id),
+    )
+    db.commit()
+    return fetch_note(note_id)
+
+
 def clear_notes():
     db = get_db()
     db.execute("DELETE FROM notes")

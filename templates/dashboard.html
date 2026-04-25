@@ -989,6 +989,13 @@
                             </div>
                         ` : ""}
                         <div class="item-actions">
+                            <button
+                                class="ghost inline-btn"
+                                type="button"
+                                data-edit-note-id="${item.id}"
+                                data-edit-note-summary="${escapeHtml(item.summary || "")}"
+                                data-edit-note-transcript="${escapeHtml(item.transcript || "")}"
+                            >Edit Note</button>
                             <button class="danger inline-btn" type="button" data-delete-note-id="${item.id}">Delete Note</button>
                         </div>
                     </article>
@@ -1013,6 +1020,33 @@
                     try {
                         await apiPost(`/api/notes/${noteId}/delete`, {});
                         setFlash("note-flash", "Note deleted.", "success");
+                        await refreshAll();
+                    } catch (error) {
+                        setFlash("note-flash", error.message, "error");
+                    }
+                });
+            });
+
+            root.querySelectorAll("[data-edit-note-id]").forEach((button) => {
+                button.addEventListener("click", async () => {
+                    const noteId = button.getAttribute("data-edit-note-id");
+                    const currentSummary = button.getAttribute("data-edit-note-summary") || "";
+                    const currentTranscript = button.getAttribute("data-edit-note-transcript") || "";
+                    const summary = window.prompt("Edit note summary:", currentSummary);
+                    if (summary === null) return;
+                    const transcript = window.prompt("Edit note transcript:", currentTranscript);
+                    if (transcript === null) return;
+                    if (!transcript.trim()) {
+                        setFlash("note-flash", "Transcript is required.", "error");
+                        return;
+                    }
+
+                    try {
+                        await apiPost(`/api/notes/${noteId}/edit`, {
+                            summary: summary.trim(),
+                            transcript: transcript.trim(),
+                        });
+                        setFlash("note-flash", "Note updated.", "success");
                         await refreshAll();
                     } catch (error) {
                         setFlash("note-flash", error.message, "error");
